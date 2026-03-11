@@ -1,0 +1,26 @@
+# Binary
+bin/
+loomhub
+
+# Data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Dependencies
+vendor/
+
+# Tailwind
+node_modules/
+
+# Generated
+*_templ.go
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
