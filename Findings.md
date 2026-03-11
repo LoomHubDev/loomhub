@@ -4,116 +4,116 @@ Current documentation review findings for `/Users/flakerim/LoomProject/loomhub`.
 
 ## P1
 
-### 1. Sync API is described as native Loom, but the contract differs
+### 1. LoomHub remote URLs still do not line up with Loom's current sync contract
 
-Affected doc:
+Affected docs:
 
 - `docs/03-api-design.md`
-
-Problem:
-
-- the docs say LoomHub exposes Loom's native sync API
-- the documented endpoints move sync under `/api/v1/sync/{owner}/{repo}`
-- the request bodies omit `project_id`
-- push/pull add `checkpoints` payloads that are not part of Loom's current documented sync protocol
-
-Why it matters:
-
-- a `loom` client built to the current Loom docs will not interoperate with LoomHub as documented
-- implementation will drift unless LoomHub either:
-  - matches Loom's current protocol exactly, or
-  - explicitly defines a versioned translation layer
-
-### 2. Storage compatibility is overstated
-
-Affected doc:
-
-- `docs/02-data-models.md`
-
-Problem:
-
-- the docs say repo-level storage is identical to local `.loom/` format
-- the design also introduces:
-  - a shared cross-repo object store
-  - a global object reference table
-
-Why it matters:
-
-- Loom currently models object storage and ref counting at the repo level
-- this means LoomHub is not actually using local Loom repo storage unchanged
-- the docs need either:
-  - a weaker compatibility claim, or
-  - an explicit adaptation/storage layer description
-
-## P2
-
-### 3. Shared owner namespace is claimed but not enforced
-
-Affected doc:
-
-- `docs/02-data-models.md`
-
-Problem:
-
-- the docs claim usernames and org names share one namespace
-- the schema keeps them in separate tables with separate unique constraints
-
-Why it matters:
-
-- both a user and an org could be named `acme`
-- that makes `/{owner}` and `/{owner}/{repo}` routing ambiguous
-
-Suggested direction:
-
-- use a shared principals table, or
-- add a reservation mechanism that enforces a global owner namespace
-
-### 4. Repository ownership schema cannot support the documented cascade behavior
-
-Affected doc:
-
-- `docs/02-data-models.md`
-
-Problem:
-
-- `repositories.owner_id` is polymorphic (`user` or `org`)
-- it is not a foreign key to either owner table
-- the docs still claim cascading deletes from owner to repo
-
-Why it matters:
-
-- the database cannot enforce that invariant as written
-- owner deletion cleanup must happen in application code unless the schema changes
-
-### 5. Loom CLI integration docs drift from Loom's current command surface
-
-Affected doc:
-
 - `docs/09-cli-reference.md`
 
 Problem:
 
-- the doc references:
-  - `loom auth login`
-  - `loom clone`
-  - `~/.loom/credentials`
-- Loom's current docs describe:
-  - `loom remote add`
-  - `loom remote auth <name>`
-- the other commands/storage format are not currently part of Loom's documented CLI
+- Loom's current docs define sync endpoints at:
+  - `POST /api/v1/negotiate`
+  - `POST /api/v1/push`
+  - `POST /api/v1/pull`
+- Loom's current remote examples use URLs like:
+  - `https://loom.example.com/project/my-app`
+- LoomHub documents remotes like:
+  - `https://hub.example.com/flakerimi/my-app`
+- LoomHub's sync endpoints are documented as:
+  - `/api/v1/sync/{owner}/{repo}/negotiate`
+  - `/api/v1/sync/{owner}/{repo}/push`
+  - `/api/v1/sync/{owner}/{repo}/pull`
 
 Why it matters:
 
-- readers may assume these commands already exist
-- LoomHub implementation may get ahead of Loom without an explicit compatibility plan
+- the docs still claim LoomHub works with the existing `loom` CLI without changes
+- but the current Loom client/docs contract does not explain how a remote URL of `/{owner}/{repo}` reaches sync endpoints under `/api/v1/sync/{owner}/{repo}/...`
+- this needs one of:
+  - Loom client changes
+  - a documented discovery/translation layer
+  - or LoomHub remote URLs that match Loom's current `/project/{id}` style
+
+## P2
+
+### 2. Repository hosting docs contradict the shared-store adaptation model
+
+Affected docs:
+
+- `docs/02-data-models.md`
+- `docs/06-repository-hosting.md`
+
+Problem:
+
+- `docs/02-data-models.md` correctly says LoomHub uses:
+  - a shared cross-repo object store
+  - a global object reference table
+  - a per-repo `objects` table that is only an index
+- `docs/06-repository-hosting.md` still says each repo DB uses the exact same Loom schema and lists:
+  - `Objects (index — hash, size, compressed, ref_count)`
+
+Why it matters:
+
+- these two docs describe different repo-level storage contracts
+- `ref_count` cannot be both repo-local and globally owned by the hub
+- implementation will drift unless `06-repository-hosting.md` matches the newer adaptation model
+
+### 3. Permission rules reference an `internal` repo visibility that does not exist elsewhere
+
+Affected docs:
+
+- `docs/05-auth-permissions.md`
+- `docs/02-data-models.md`
+
+Problem:
+
+- org member permissions say members get `write (internal)`
+- repository visibility is only documented as `public` or `private`
+
+Why it matters:
+
+- access control rules are underspecified for org repos
+- either `internal` needs to become a real third visibility level, or the permission examples need to use the existing two-level model
+
+### 4. The `go:embed` example is invalid as written
+
+Affected doc:
+
+- `docs/07-project-structure.md`
+
+Problem:
+
+- the example uses:
+  - `//go:embed all:../../frontend/dist`
+- this pattern is not valid for Go embedding
+
+Why it matters:
+
+- the example cannot compile as shown
+- I verified this with a temporary Go module: `go test` fails with `pattern all:../../frontend/dist: invalid pattern syntax`
+- the docs should show an embeddable path layout or a build step that copies frontend assets into a valid location before embedding
+
+### 5. Testing strategy still assumes a `loom clone` command that the CLI docs mark as future work
+
+Affected docs:
+
+- `docs/10-testing-strategy.md`
+- `docs/09-cli-reference.md`
+
+Problem:
+
+- the end-to-end test example uses:
+  - `testutil.RunLoom(t, dir2, "clone", srv.URL+"/testuser/my-app")`
+- but the CLI reference explicitly says `loom clone` is a future command and not part of the current Loom surface
+
+Why it matters:
+
+- the test plan currently depends on a command the rest of the docs say does not exist yet
+- for the current MVP, the example should use `init + remote add + pull` or clearly mark `clone` as future-only
 
 ## Verdict
 
-The LoomHub docs are good enough to express product direction, but not yet good enough to be treated as the final implementation source of truth.
+The docs are much closer now. The schema and owner-model problems from the earlier review are fixed.
 
-Before building against them, fix:
-
-1. the Loom protocol boundary
-2. the storage compatibility claim
-3. the owner namespace and ownership schema inconsistencies
-4. the Loom CLI integration drift
+They are still not fully implementation-ready yet because the LoomHub ↔ Loom protocol boundary is unresolved, and a few smaller docs now disagree on storage, permissions, embedding, and test assumptions.

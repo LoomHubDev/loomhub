@@ -120,7 +120,7 @@ loom pull origin
 loom remote status
 ```
 
-> **Note:** LoomHub does not require any new `loom` CLI commands. All interaction uses `loom remote add`, `loom remote auth`, `loom push`, and `loom pull` which are part of Loom's current command surface. Future commands like `loom clone` would need to be added to Loom itself first.
+> **Note:** LoomHub does not require any new `loom` CLI commands. All interaction uses `loom remote add`, `loom remote auth`, `loom push`, and `loom pull` which are part of Loom's current command surface. The Loom client uses the remote URL as the base path and appends `/api/v1/negotiate`, `/api/v1/push`, `/api/v1/pull` — this works naturally with LoomHub's `/{owner}/{repo}/api/v1/...` routing. Future commands like `loom clone` would need to be added to Loom itself first.
 
 ### Access Token Setup
 

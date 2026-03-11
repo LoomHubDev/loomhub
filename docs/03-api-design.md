@@ -14,8 +14,9 @@ All APIs share the same HTTP server and authentication layer.
 ## Base URL & Versioning
 
 ```
-https://hub.example.com/api/v1/...       # REST API + Sync API
-https://hub.example.com/                 # Vue SPA (static files)
+https://hub.example.com/api/v1/...                     # REST API (hub-level)
+https://hub.example.com/{owner}/{repo}/api/v1/...      # Sync API (per-repo)
+https://hub.example.com/                               # Vue SPA (static files)
 ```
 
 ---
@@ -42,25 +43,51 @@ https://hub.example.com/                 # Vue SPA (static files)
 
 ## Sync API
 
-These endpoints implement Loom's native sync protocol exactly as defined in [Loom's sync spec](../../loom/docs/06-systems/sync.md). The `loom` CLI calls these directly.
+These endpoints implement Loom's native sync protocol as defined in [Loom's sync spec](../../loom/docs/06-systems/sync.md).
 
-LoomHub maps `{owner}/{repo}` to a `project_id` internally — the sync handler resolves the repo, then delegates to the standard Loom protocol types.
+> **Design decision:** LoomHub does NOT extend or modify Loom's sync protocol. The request/response types are identical to what `loom-server` uses.
 
-> **Design decision:** LoomHub does NOT extend or modify Loom's sync protocol. The request/response types are identical to what `loom-server` uses. This ensures any `loom` client built to the Loom spec interoperates with LoomHub without changes.
+### How Loom CLI Reaches LoomHub
 
-### Endpoint Routing
+Loom's sync endpoints are at fixed paths (`/api/v1/negotiate`, `/api/v1/push`, `/api/v1/pull`). The Loom client constructs these from the remote URL base. When a user adds a LoomHub remote:
 
-Loom's native sync endpoints are:
+```bash
+loom remote add origin https://hub.example.com/flakerimi/my-app
+```
 
-| Loom Endpoint | LoomHub Route |
-|---------------|--------------|
-| `POST /api/v1/negotiate` | `POST /api/v1/sync/{owner}/{repo}/negotiate` |
-| `POST /api/v1/push` | `POST /api/v1/sync/{owner}/{repo}/push` |
-| `POST /api/v1/pull` | `POST /api/v1/sync/{owner}/{repo}/pull` |
+The Loom client uses `https://hub.example.com/flakerimi/my-app` as the base URL and appends the standard sync paths:
 
-The `{owner}/{repo}` prefix is LoomHub's routing layer. The sync handler strips it, resolves the repo's `project_id`, and injects it into the request before processing with standard Loom sync logic.
+```
+POST https://hub.example.com/flakerimi/my-app/api/v1/negotiate
+POST https://hub.example.com/flakerimi/my-app/api/v1/push
+POST https://hub.example.com/flakerimi/my-app/api/v1/pull
+```
 
-### POST `/api/v1/sync/{owner}/{repo}/negotiate`
+This matches how Loom's sync client already works — it uses the remote URL as the base, not a hardcoded server root. No Loom client changes are needed.
+
+### LoomHub Server Routing
+
+LoomHub routes these requests by extracting `{owner}/{repo}` from the path prefix:
+
+| Incoming Request | Routing |
+|-----------------|---------|
+| `POST /{owner}/{repo}/api/v1/negotiate` | Resolve repo from `{owner}/{repo}`, handle negotiate |
+| `POST /{owner}/{repo}/api/v1/push` | Resolve repo, handle push |
+| `POST /{owner}/{repo}/api/v1/pull` | Resolve repo, handle pull |
+
+```go
+// Router setup
+r.Route("/{owner}/{repo}/api/v1", func(r chi.Router) {
+    r.Use(resolveRepoMiddleware) // extracts owner/repo, loads repo DB
+    r.Post("/negotiate", s.handleNegotiate)
+    r.Post("/push", s.handlePush)
+    r.Post("/pull", s.handlePull)
+})
+```
+
+The `resolveRepoMiddleware` resolves the `{owner}/{repo}` path into a repo database connection and injects it into the request context. The sync handlers then operate on the repo DB using Loom's standard protocol types — no translation needed.
+
+### POST `/{owner}/{repo}/api/v1/negotiate`
 
 Find common ancestor and determine what needs to sync.
 
@@ -94,7 +121,7 @@ Find common ancestor and determine what needs to sync.
 }
 ```
 
-### POST `/api/v1/sync/{owner}/{repo}/push`
+### POST `/{owner}/{repo}/api/v1/push`
 
 Push operations and objects from client to server.
 
@@ -141,7 +168,7 @@ Push operations and objects from client to server.
 
 > **Server-side handling:** When objects arrive, LoomHub writes them to the shared object store (not per-repo). This is transparent to the client — the protocol is unchanged.
 
-### POST `/api/v1/sync/{owner}/{repo}/pull`
+### POST `/{owner}/{repo}/api/v1/pull`
 
 Pull new operations and objects from server to client.
 

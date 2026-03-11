@@ -87,7 +87,7 @@ LoomHub is designed to run on a single machine or a small cluster. No Kubernetes
 
 | Layer | Responsibility |
 |-------|---------------|
-| **Sync API** | Implements Loom's negotiate/push/pull protocol exactly per Loom's spec |
+| **Sync API** | Implements Loom's negotiate/push/pull protocol at `/{owner}/{repo}/api/v1/...` |
 | **REST API** | CRUD for users, repos, merge requests, search, webhooks — consumed by the Vue SPA |
 | **Vue SPA** | Client-side rendered UI with reactive components, compiled and embedded in the Go binary |
 | **Application** | Business logic — auth, permissions, notifications, webhook dispatch |

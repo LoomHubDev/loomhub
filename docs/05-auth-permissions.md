@@ -81,10 +81,12 @@ For a given user + repository, access is resolved in order:
 3. Is user a repo collaborator?   → collaborator's permission level
 4. Is user an org member?         → based on org role:
    - owner/admin                  → admin access
-   - member                       → read (public), write (internal)
+   - member                       → read access to all org repos
 5. Is repo public?                → read access
 6. Otherwise                      → no access
 ```
+
+> Note: Repository visibility is `public` or `private`. Org members get read access to all org repos (including private ones). For write access, org members must be added as repo collaborators.
 
 ### Organization Roles
 
@@ -92,7 +94,7 @@ For a given user + repository, access is resolved in order:
 |------|------------|----------------|
 | **owner** | Admin to all org repos | Full org settings, billing, delete |
 | **admin** | Admin to all org repos | Manage members, create repos |
-| **member** | Read to all org repos (write if internal) | View members |
+| **member** | Read to all org repos | View members |
 
 ### Merge Request Permissions
 
@@ -129,8 +131,8 @@ For a given user + repository, access is resolved in order:
 |----------|-------|
 | `/login` | 10 per minute per IP |
 | `/register` | 5 per hour per IP |
-| `/api/v1/sync/*/push` | 60 per minute per user |
-| `/api/v1/sync/*/pull` | 120 per minute per user |
+| `/{owner}/{repo}/api/v1/push` | 60 per minute per user |
+| `/{owner}/{repo}/api/v1/pull` | 120 per minute per user |
 | General API | 300 per minute per user |
 
 Implemented with token bucket per IP/user, stored in memory (no Redis needed).

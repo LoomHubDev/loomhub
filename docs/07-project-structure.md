@@ -77,7 +77,8 @@ loomhub/
 │   │   └── sign.go                 # HMAC-SHA256 signing
 │   │
 │   └── server/
-│       └── server.go               # HTTP server setup, SPA fallback, embed.FS
+│       ├── server.go               # HTTP server setup, SPA fallback, embed.FS
+│       └── dist/                   # Vue build output (copied at build time, gitignored)
 │
 ├── frontend/                       # Vue 3 SPA
 │   ├── src/
@@ -176,12 +177,17 @@ require (
 .PHONY: build dev test clean
 
 # Full production build
-build: frontend-build
+build: frontend-build embed-frontend
 	go build -o bin/loomhub ./cmd/loomhub
 
 # Build Vue SPA
 frontend-build:
 	cd frontend && npm install && npm run build
+
+# Copy frontend dist into Go-embeddable location
+embed-frontend:
+	rm -rf internal/server/dist
+	cp -r frontend/dist internal/server/dist
 
 # Development — run Go backend + Vue dev server
 dev:
@@ -206,21 +212,30 @@ clean:
 
 ### SPA Embedding
 
-In production, the Vue `dist/` is embedded into the Go binary:
+In production, the Vue `dist/` is copied into `internal/server/dist/` (by `make embed-frontend`) so it can be embedded into the Go binary using a valid relative path:
 
 ```go
 // internal/server/server.go
-//go:embed all:../../frontend/dist
+package server
+
+import "embed"
+
+//go:embed all:dist
 var frontendDist embed.FS
 
 func (s *Server) setupRoutes() {
-    // API routes
+    // Sync API routes (per-repo, Loom protocol)
+    s.router.Route("/{owner}/{repo}/api/v1", s.syncRoutes)
+
+    // Hub API routes
     s.router.Route("/api/v1", s.apiRoutes)
 
     // SPA fallback — serve index.html for all non-API routes
     s.router.Get("/*", s.spaHandler())
 }
 ```
+
+The `internal/server/dist/` directory is gitignored — it's generated at build time by the Makefile.
 
 ### CLI Commands
 

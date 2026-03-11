@@ -64,20 +64,24 @@ Test the actual `loom` CLI against a running LoomHub server:
 func TestCLIPushPull(t *testing.T) {
     srv := testutil.StartServer(t)
 
-    // Init local loom project
+    // Init local loom project and push
     dir := t.TempDir()
     testutil.RunLoom(t, dir, "init")
     testutil.RunLoom(t, dir, "remote", "add", "origin", srv.URL+"/testuser/my-app")
 
-    // Create file, checkpoint, push
     os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0644)
     testutil.RunLoom(t, dir, "checkpoint", "initial")
     testutil.RunLoom(t, dir, "push", "origin")
 
-    // Clone to new dir and verify
+    // Pull into a fresh project and verify
     dir2 := t.TempDir()
-    testutil.RunLoom(t, dir2, "clone", srv.URL+"/testuser/my-app")
-    // ... verify content matches
+    testutil.RunLoom(t, dir2, "init")
+    testutil.RunLoom(t, dir2, "remote", "add", "origin", srv.URL+"/testuser/my-app")
+    testutil.RunLoom(t, dir2, "pull", "origin")
+
+    // Verify content matches
+    content, _ := os.ReadFile(filepath.Join(dir2, "main.go"))
+    assert.Equal(t, "package main", string(content))
 }
 ```
 

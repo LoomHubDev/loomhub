@@ -14,8 +14,8 @@ vendor/
 # Tailwind
 node_modules/
 
-# Generated
-*_templ.go
+# Generated — Vue dist copied for Go embedding
+internal/server/dist/
 
 # IDE
 .idea/

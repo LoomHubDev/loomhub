@@ -67,16 +67,18 @@ This is fast because:
 
 Each repository has its own SQLite database at `repos/{owner}/{repo}/loom.db`.
 
-This database contains the exact same schema as a local Loom project:
+This database uses tables based on the Loom schema, with one adaptation for the shared object store:
 
 ```sql
 -- Operations (append-only log)
 -- Checkpoints (named points)
 -- Streams (timeline management)
 -- Entities (current state per space)
--- Objects (index — hash, size, compressed, ref_count)
+-- Objects (hash index only — hash, size, compressed; NO ref_count)
 -- Metadata (key-value config)
 ```
+
+The per-repo `objects` table serves as an **index** of which objects the repo references. It does **not** store blobs or reference counts — those are managed by the shared object store and the hub-level `object_refs` table respectively. See [Data Models — Per-Repo Database](02-data-models.md#per-repo-database) for details on this adaptation.
 
 The server opens this database when handling sync requests and web UI queries. WAL mode enables concurrent reads during a push.
 
