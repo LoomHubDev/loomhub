@@ -100,14 +100,15 @@ Users: 15
 
 ## Loom CLI Integration
 
-Users interact with LoomHub through the standard `loom` CLI:
+Users interact with LoomHub through Loom's existing CLI commands (see [Loom CLI reference](../../loom/docs/11-cli-reference.md) and [sync protocol](../../loom/docs/06-systems/sync.md)):
 
 ```bash
 # Add LoomHub as a remote
 loom remote add origin https://hub.example.com/flakerimi/my-app
 
-# Authenticate (stores token locally)
-loom auth login https://hub.example.com
+# Authenticate — uses Loom's existing remote auth command
+# Prompts for token or opens browser for OAuth
+loom remote auth origin
 
 # Push to LoomHub
 loom push origin
@@ -115,16 +116,12 @@ loom push origin
 # Pull from LoomHub
 loom pull origin
 
-# Clone (future)
-loom clone https://hub.example.com/flakerimi/my-app
+# Show sync status
+loom remote status
 ```
 
-### Auth Token Storage
+> **Note:** LoomHub does not require any new `loom` CLI commands. All interaction uses `loom remote add`, `loom remote auth`, `loom push`, and `loom pull` which are part of Loom's current command surface. Future commands like `loom clone` would need to be added to Loom itself first.
 
-The `loom` CLI stores access tokens in `~/.loom/credentials`:
+### Access Token Setup
 
-```toml
-[hub.example.com]
-token = "loomhub-pat_01HZ..."
-username = "flakerimi"
-```
+Users create an access token in LoomHub's web UI (Settings > Access Tokens), then provide it when running `loom remote auth origin`. Loom stores credentials as documented in its own config format.

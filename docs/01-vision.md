@@ -18,7 +18,7 @@ Loom tracks every operation across multiple content spaces (code, docs, design, 
 
 ### 1. Loom-Native
 
-LoomHub speaks Loom's protocol natively. It stores operations, checkpoints, streams, and content-addressed objects exactly as Loom does locally. No translation layer, no impedance mismatch.
+LoomHub implements Loom's sync protocol (negotiate/push/pull) exactly as defined in Loom's spec. The `loom` CLI interoperates with LoomHub without modifications. Server-side storage uses the same Loom database schema per repo, with object blob storage adapted to a shared cross-repo store (see [Repository Hosting](06-repository-hosting.md)).
 
 ### 2. Multi-Space Aware
 
@@ -34,9 +34,9 @@ Like Loom itself, LoomHub's storage is append-only. Operations are never deleted
 
 ### 5. Simple & Fast
 
-- Go backend, single binary deployment
+- Go backend, single binary deployment (Vue SPA embedded via `embed.FS`)
 - SQLite per project (no shared database cluster needed for small/medium scale)
-- Minimal JavaScript — server-rendered HTML with progressive enhancement
+- Vue 3 SPA for a reactive UI with real-time updates
 - Fast push/pull over HTTP with delta sync
 
 ### 6. Self-Hostable First
@@ -50,9 +50,9 @@ LoomHub is designed to run on a single machine or a small cluster. No Kubernetes
 │                    LoomHub Server                     │
 │                                                       │
 │  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
-│  │ Sync API │  │ REST API │  │    Web UI (SSR)    │  │
-│  │ (push/   │  │ (users,  │  │  (templ + htmx)   │  │
-│  │  pull,   │  │  repos,  │  │                    │  │
+│  │ Sync API │  │ REST API │  │   Static Files    │  │
+│  │ (push/   │  │ (users,  │  │  (Vue SPA dist)   │  │
+│  │  pull,   │  │  repos,  │  │  via embed.FS     │  │
 │  │  negot.) │  │  search) │  │                    │  │
 │  └────┬─────┘  └────┬─────┘  └────────┬──────────┘  │
 │       │              │                 │              │
@@ -71,30 +71,54 @@ LoomHub is designed to run on a single machine or a small cluster. No Kubernetes
 │  │  └─────────┘  └───────────┘  └──────────────┘ │  │
 │  └────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────┐
+│                    Vue 3 SPA (Browser)                │
+│                                                       │
+│  Vue Router ── Pinia Store ── API Client              │
+│       │              │              │                 │
+│  Pages/Views    State Mgmt    fetch(/api/v1/...)      │
+│  Components     Reactivity                            │
+│  Tailwind CSS                                         │
+└─────────────────────────────────────────────────────┘
 ```
 
 ### Key Layers
 
 | Layer | Responsibility |
 |-------|---------------|
-| **Sync API** | Implements Loom's negotiate/push/pull protocol for `loom push` and `loom pull` |
-| **REST API** | CRUD for users, repos, merge requests, search, webhooks |
-| **Web UI** | Server-rendered pages with htmx for interactivity |
+| **Sync API** | Implements Loom's negotiate/push/pull protocol exactly per Loom's spec |
+| **REST API** | CRUD for users, repos, merge requests, search, webhooks — consumed by the Vue SPA |
+| **Vue SPA** | Client-side rendered UI with reactive components, compiled and embedded in the Go binary |
 | **Application** | Business logic — auth, permissions, notifications, webhook dispatch |
 | **Storage** | Hub-level SQLite (users, repos, permissions) + per-repo Loom databases + shared object store |
 
 ## Tech Stack
 
+### Backend (Go)
+
 | Component | Technology | Why |
 |-----------|-----------|-----|
 | Language | Go | Matches Loom; single binary; excellent concurrency |
 | HTTP Router | chi | Lightweight, composable, idiomatic Go |
-| Templates | templ | Type-safe Go templates, compiles to Go code |
-| Interactivity | htmx | Progressive enhancement without SPA complexity |
-| CSS | Tailwind CSS | Utility-first, fast prototyping |
 | Database | SQLite (modernc.org) | Same as Loom; no external DB dependency; WAL mode |
 | Auth | bcrypt + JWT | Simple, proven |
 | Object Storage | Filesystem (content-addressed) | Shared across repos, deduplication via SHA-256 |
+| SPA Embedding | `embed.FS` | Vue dist bundled into Go binary for single-binary deploy |
+
+### Frontend (Vue)
+
+| Component | Technology | Why |
+|-----------|-----------|-----|
+| Framework | Vue 3 (Composition API) | Reactive UI; you already know Vue/Nuxt; large ecosystem |
+| Build Tool | Vite | Fast HMR, optimized builds |
+| Routing | Vue Router | Client-side navigation |
+| State | Pinia | Lightweight, type-safe state management |
+| CSS | Tailwind CSS | Utility-first, fast prototyping |
+| HTTP Client | ofetch | Lightweight, interceptors, auto-retry |
+| Syntax Highlighting | Shiki | Accurate, theme-able, same engine as VS Code |
+| Markdown | markdown-it | Fast, extensible markdown rendering |
+| Diff Viewer | Custom component | Multi-space aware, inline comments |
 
 ## Deployment Model
 

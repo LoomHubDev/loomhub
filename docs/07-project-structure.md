@@ -1,6 +1,6 @@
 # LoomHub — Project Structure
 
-Go project layout and development guide.
+Go + Vue monorepo layout and development guide.
 
 ---
 
@@ -22,6 +22,7 @@ loomhub/
 │   │   └── repo.go                 # Per-repo Loom database access
 │   │
 │   ├── models/
+│   │   ├── owner.go                # Owner (shared namespace)
 │   │   ├── user.go                 # User, SSHKey, AccessToken
 │   │   ├── org.go                  # Organization, OrgMember
 │   │   ├── repo.go                 # Repository, Collaborator
@@ -31,6 +32,7 @@ loomhub/
 │   │   └── label.go                # Labels
 │   │
 │   ├── store/
+│   │   ├── owners.go               # Owner namespace CRUD
 │   │   ├── users.go                # User CRUD
 │   │   ├── orgs.go                 # Org CRUD
 │   │   ├── repos.go                # Repo CRUD
@@ -40,7 +42,7 @@ loomhub/
 │   │   ├── webhooks.go             # Webhook CRUD
 │   │   ├── activities.go           # Activity logging
 │   │   ├── stars.go                # Stars
-│   │   └── tokens.go              # Access tokens
+│   │   └── tokens.go               # Access tokens
 │   │
 │   ├── auth/
 │   │   ├── jwt.go                  # JWT generation & validation
@@ -53,7 +55,7 @@ loomhub/
 │   │   ├── negotiate.go            # Negotiate logic
 │   │   ├── push.go                 # Push logic (receive ops + objects)
 │   │   ├── pull.go                 # Pull logic (send ops + objects)
-│   │   └── objects.go              # Object store management
+│   │   └── objects.go              # Shared object store management
 │   │
 │   ├── api/
 │   │   ├── router.go               # REST API router setup
@@ -64,59 +66,10 @@ loomhub/
 │   │   ├── merge_requests.go       # MR endpoints
 │   │   ├── search.go               # Search endpoints
 │   │   ├── webhooks.go             # Webhook endpoints
-│   │   └── middleware.go           # API-specific middleware (JSON, pagination)
-│   │
-│   ├── web/
-│   │   ├── router.go               # Web UI router setup
-│   │   ├── pages/                  # Page handlers
-│   │   │   ├── home.go
-│   │   │   ├── auth.go             # Login, register
-│   │   │   ├── profile.go          # User/org profiles
-│   │   │   ├── repo.go             # Repo pages
-│   │   │   ├── tree.go             # Entity tree browser
-│   │   │   ├── log.go              # Checkpoint log
-│   │   │   ├── diff.go             # Diff viewer
-│   │   │   ├── merge_request.go    # MR pages
-│   │   │   ├── settings.go         # Settings pages
-│   │   │   └── admin.go            # Admin pages
-│   │   └── templates/              # templ templates
-│   │       ├── layouts/
-│   │       │   ├── base.templ      # Base HTML layout
-│   │       │   ├── app.templ       # Authenticated layout
-│   │       │   └── public.templ    # Public layout
-│   │       ├── components/
-│   │       │   ├── nav.templ       # Navigation bar
-│   │       │   ├── footer.templ
-│   │       │   ├── pagination.templ
-│   │       │   ├── avatar.templ
-│   │       │   ├── diff.templ      # Diff rendering component
-│   │       │   ├── entity_tree.templ
-│   │       │   ├── checkpoint.templ
-│   │       │   └── flash.templ     # Flash messages
-│   │       └── pages/
-│   │           ├── home.templ
-│   │           ├── login.templ
-│   │           ├── register.templ
-│   │           ├── explore.templ
-│   │           ├── profile.templ
-│   │           ├── repo.templ
-│   │           ├── tree.templ
-│   │           ├── entity.templ
-│   │           ├── log.templ
-│   │           ├── checkpoint.templ
-│   │           ├── diff.templ
-│   │           ├── streams.templ
-│   │           ├── mr_list.templ
-│   │           ├── mr_new.templ
-│   │           ├── mr_detail.templ
-│   │           ├── settings.templ
-│   │           └── admin.templ
+│   │   └── middleware.go           # API middleware (JSON, pagination, CORS)
 │   │
 │   ├── render/
-│   │   ├── code.go                 # Syntax highlighting (chroma)
-│   │   ├── markdown.go             # Markdown rendering (goldmark)
-│   │   ├── diff.go                 # Diff formatting
-│   │   └── json.go                 # JSON tree rendering
+│   │   └── diff.go                 # Server-side diff computation for API
 │   │
 │   ├── webhook/
 │   │   ├── dispatch.go             # Webhook event dispatch
@@ -124,30 +77,38 @@ loomhub/
 │   │   └── sign.go                 # HMAC-SHA256 signing
 │   │
 │   └── server/
-│       └── server.go               # HTTP server setup, middleware chain
+│       └── server.go               # HTTP server setup, SPA fallback, embed.FS
 │
-├── static/
-│   ├── css/
-│   │   └── style.css               # Tailwind output
-│   ├── js/
-│   │   └── htmx.min.js            # htmx library
-│   └── img/
-│       └── logo.svg
+├── frontend/                       # Vue 3 SPA
+│   ├── src/
+│   │   ├── main.ts
+│   │   ├── App.vue
+│   │   ├── router/
+│   │   ├── stores/
+│   │   ├── api/
+│   │   ├── layouts/
+│   │   ├── views/
+│   │   ├── components/
+│   │   └── utils/
+│   ├── index.html
+│   ├── vite.config.ts
+│   ├── tailwind.config.ts
+│   ├── tsconfig.json
+│   └── package.json
 │
 ├── test/
 │   ├── integration/
 │   │   ├── sync_test.go            # Push/pull integration tests
 │   │   ├── api_test.go             # REST API tests
-│   │   └── web_test.go             # Web UI smoke tests
+│   │   └── helpers_test.go         # Test helpers
 │   └── testutil/
-│       └── helpers.go              # Test helpers
+│       └── helpers.go              # Test helpers (test DB, test server)
 │
-├── docs/                           # Design documentation (this folder)
+├── docs/                           # Design documentation
 │
 ├── go.mod
 ├── go.sum
 ├── Makefile
-├── tailwind.config.js
 ├── .gitignore
 └── LICENSE
 ```
@@ -155,6 +116,8 @@ loomhub/
 ---
 
 ## Dependencies
+
+### Go (backend)
 
 ```go
 // go.mod
@@ -174,18 +137,33 @@ require (
     golang.org/x/crypto               // bcrypt
     github.com/golang-jwt/jwt/v5      // JWT
 
-    // Templates
-    github.com/a-h/templ              // Type-safe templates
-
-    // Rendering
-    github.com/alecthomas/chroma/v2   // Syntax highlighting
-    github.com/yuin/goldmark           // Markdown
-
     // Utilities
     github.com/oklog/ulid/v2          // ULID generation
     github.com/klauspost/compress     // Zstandard compression
     github.com/BurntSushi/toml        // Config parsing
 )
+```
+
+### Node.js (frontend)
+
+```json
+{
+  "dependencies": {
+    "vue": "^3.5",
+    "vue-router": "^4.5",
+    "pinia": "^3",
+    "ofetch": "^1",
+    "@heroicons/vue": "^2"
+  },
+  "devDependencies": {
+    "vite": "^6",
+    "@vitejs/plugin-vue": "^5",
+    "typescript": "^5.7",
+    "tailwindcss": "^4",
+    "shiki": "^3",
+    "markdown-it": "^14"
+  }
+}
 ```
 
 ---
@@ -195,33 +173,53 @@ require (
 ### Makefile
 
 ```makefile
-.PHONY: build run dev test clean
+.PHONY: build dev test clean
 
-# Build
-build: templ-generate tailwind
+# Full production build
+build: frontend-build
 	go build -o bin/loomhub ./cmd/loomhub
 
-# Development (with hot reload)
+# Build Vue SPA
+frontend-build:
+	cd frontend && npm install && npm run build
+
+# Development — run Go backend + Vue dev server
 dev:
-	templ generate --watch &
-	npx tailwindcss -i static/css/input.css -o static/css/style.css --watch &
-	go run ./cmd/loomhub serve --dev
+	@echo "Starting Go backend on :3000..."
+	go run ./cmd/loomhub serve --dev &
+	@echo "Starting Vue dev server on :5173..."
+	cd frontend && npm run dev
 
-# Generate templ templates
-templ-generate:
-	templ generate
+# Run all tests
+test: test-go test-frontend
 
-# Build Tailwind CSS
-tailwind:
-	npx tailwindcss -i static/css/input.css -o static/css/style.css --minify
-
-# Run tests
-test:
+test-go:
 	go test ./...
+
+test-frontend:
+	cd frontend && npm test
 
 # Clean
 clean:
-	rm -rf bin/
+	rm -rf bin/ frontend/dist/
+```
+
+### SPA Embedding
+
+In production, the Vue `dist/` is embedded into the Go binary:
+
+```go
+// internal/server/server.go
+//go:embed all:../../frontend/dist
+var frontendDist embed.FS
+
+func (s *Server) setupRoutes() {
+    // API routes
+    s.router.Route("/api/v1", s.apiRoutes)
+
+    // SPA fallback — serve index.html for all non-API routes
+    s.router.Get("/*", s.spaHandler())
+}
 ```
 
 ### CLI Commands
@@ -284,16 +282,24 @@ format = "text"              # text, json
 ## Development Workflow
 
 1. Clone repo
-2. Install Go 1.23+, Node.js (for Tailwind), templ CLI
-3. `make dev` — starts everything with hot reload
-4. Server runs at `http://localhost:3000`
-5. First user to register becomes admin
+2. Install Go 1.23+, Node.js 20+
+3. `cd frontend && npm install`
+4. Terminal 1: `go run ./cmd/loomhub serve --dev` (backend on :3000)
+5. Terminal 2: `cd frontend && npm run dev` (Vite on :5173 with proxy to :3000)
+6. Open `http://localhost:5173`
+7. First user to register becomes admin
 
 ### Running Tests
 
 ```bash
-make test                    # All tests
-go test ./internal/store/... # Store tests only
-go test ./internal/sync/...  # Sync tests only
-go test ./test/integration/  # Integration tests
+# Go tests
+go test ./...                     # All
+go test ./internal/store/...      # Store only
+go test ./internal/sync/...       # Sync only
+go test ./test/integration/       # Integration
+go test -race ./...               # Race detector
+
+# Frontend tests
+cd frontend && npm test           # Vitest
+cd frontend && npm run test:e2e   # Playwright (future)
 ```

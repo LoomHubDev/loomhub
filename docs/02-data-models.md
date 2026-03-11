@@ -3,20 +3,39 @@
 LoomHub has two layers of data:
 
 1. **Hub-level** — Users, organizations, repositories, permissions, merge requests, webhooks (stored in a central Hub database)
-2. **Repo-level** — Operations, checkpoints, streams, entities, objects (stored in per-repo Loom databases, identical to local `.loom/` format)
+2. **Repo-level** — Operations, checkpoints, streams, entities, objects (stored in per-repo Loom databases, based on the local `.loom/` schema with a server-side adaptation layer)
 
 This document covers the Hub-level models. Repo-level models are defined by [Loom's data model](../../loom/docs/04-data-models.md).
+
+> **Note on storage compatibility:** Per-repo databases use the same *schema* as a local `.loom/` project (operations, checkpoints, streams, entities, metadata tables). However, object storage differs: locally, Loom stores objects on disk inside `.loom/objects/` with per-repo reference counts. On LoomHub, objects are stored in a **shared cross-repo object store** with a **global reference count table** in the hub database. The sync protocol handles this transparently — the `objects` table in each repo database stores the hash index, but actual blob storage is redirected to the shared store. See [Repository Hosting](06-repository-hosting.md) for details on this adaptation layer.
 
 ---
 
 ## Hub Database Schema
 
+### Owners (Shared Namespace)
+
+Users and organizations share a single namespace for URL routing (`/{owner}/{repo}`). The `owners` table enforces this globally — no user and org can have the same name.
+
+```sql
+CREATE TABLE owners (
+    id          TEXT PRIMARY KEY,       -- ULID (same as user.id or org.id)
+    name        TEXT NOT NULL UNIQUE,    -- lowercase, alphanumeric + hyphens
+    type        TEXT NOT NULL,           -- 'user' or 'org'
+    created_at  TEXT NOT NULL
+);
+
+CREATE INDEX idx_owners_name ON owners(name);
+```
+
+When a user registers or an org is created, a row is inserted into `owners` first. If the name is taken (by either a user or an org), the insert fails.
+
 ### Users
 
 ```sql
 CREATE TABLE users (
-    id          TEXT PRIMARY KEY,       -- ULID
-    username    TEXT NOT NULL UNIQUE,    -- lowercase, alphanumeric + hyphens
+    id          TEXT PRIMARY KEY REFERENCES owners(id) ON DELETE CASCADE,
+    username    TEXT NOT NULL UNIQUE,    -- lowercase, must match owners.name
     email       TEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL DEFAULT '',
     bio         TEXT NOT NULL DEFAULT '',
@@ -70,8 +89,8 @@ CREATE INDEX idx_tokens_hash ON access_tokens(token_hash);
 
 ```sql
 CREATE TABLE organizations (
-    id          TEXT PRIMARY KEY,       -- ULID
-    name        TEXT NOT NULL UNIQUE,    -- lowercase slug
+    id          TEXT PRIMARY KEY REFERENCES owners(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL UNIQUE,    -- lowercase slug, must match owners.name
     display_name TEXT NOT NULL DEFAULT '',
     description TEXT NOT NULL DEFAULT '',
     avatar_url  TEXT NOT NULL DEFAULT '',
@@ -101,8 +120,7 @@ CREATE INDEX idx_org_members_user ON org_members(user_id);
 ```sql
 CREATE TABLE repositories (
     id          TEXT PRIMARY KEY,       -- ULID
-    owner_id    TEXT NOT NULL,           -- user_id or org_id
-    owner_type  TEXT NOT NULL,           -- 'user' or 'org'
+    owner_id    TEXT NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,           -- lowercase slug
     description TEXT NOT NULL DEFAULT '',
     visibility  TEXT NOT NULL DEFAULT 'public', -- public, private
@@ -125,12 +143,14 @@ CREATE TABLE repositories (
     UNIQUE(owner_id, name)
 );
 
-CREATE INDEX idx_repos_owner ON repositories(owner_id, owner_type);
+CREATE INDEX idx_repos_owner ON repositories(owner_id);
 CREATE INDEX idx_repos_name ON repositories(name);
 CREATE INDEX idx_repos_visibility ON repositories(visibility);
 CREATE INDEX idx_repos_pushed ON repositories(pushed_at);
 CREATE INDEX idx_repos_stars ON repositories(star_count);
 ```
+
+Owner type (user or org) can be resolved via `JOIN owners ON owners.id = repositories.owner_id`. Cascading deletes now work through the database: deleting an owner cascades to the user/org row and to all their repositories.
 
 ### Repository Collaborators
 
@@ -340,41 +360,44 @@ All repositories share a single content-addressed object store. Since objects ar
 
 ### Per-Repo Database
 
-Each repository has its own SQLite database containing the standard Loom tables:
+Each repository has its own SQLite database containing tables based on the Loom schema:
 - `operations` — append-only operation log
 - `checkpoints` — named points in time
 - `streams` — timeline management
 - `entities` — current entity states
-- `objects` — object index (references shared object store)
+- `objects` — object hash index (hash, size, compressed flag — but **not** ref_count or blob storage)
 - `metadata` — repo-level key-value config
 
-This matches the format of a local `.loom/` database, so the sync protocol works without translation.
+The schema is based on a local `.loom/` database with one key difference: **object blob storage is delegated to the shared object store** rather than stored per-repo. The `objects` table in each repo database serves as an index of which objects the repo references, but the actual bytes live in the shared store. The sync handler translates between Loom's native protocol (which assumes per-repo object storage) and LoomHub's shared store transparently.
 
 ---
 
 ## Entity Relationships
 
 ```
-User ──────────┬── owns ──── Repository
-               │                 │
-               ├── member of ── Organization ── owns ── Repository
-               │                 │
-               ├── stars ────── Repository
-               │
-               ├── authors ──── MergeRequest ──── has ── Comments
-               │                     │                     Reviews
-               │                     │                     Labels
-               └── creates ──── AccessToken
-                                 SSHKey
-                                 Activity
+Owner (shared namespace) ─── type=user ──── User
+        │                └── type=org  ──── Organization
+        │
+        └── owns ──── Repository
+                          │
+User ─────┬── member of ── Organization
+          │
+          ├── stars ────── Repository
+          │
+          ├── authors ──── MergeRequest ──── has ── Comments
+          │                     │                     Reviews
+          │                     │                     Labels
+          └── creates ──── AccessToken
+                            SSHKey
+                            Activity
 
 Repository ──── has ──── Webhooks ──── has ──── Deliveries
 ```
 
 ## Key Invariants
 
-1. **Username uniqueness** — Usernames and org names share the same namespace (like GitHub: `github.com/username` and `github.com/orgname`)
-2. **Repo uniqueness** — Repository names are unique within an owner (`owner/repo`)
+1. **Owner namespace uniqueness** — Enforced by the `owners` table: usernames and org names share a single `UNIQUE(name)` constraint. No user and org can have the same name. This makes `/{owner}/{repo}` routing unambiguous.
+2. **Repo uniqueness** — Repository names are unique within an owner (`UNIQUE(owner_id, name)`)
 3. **MR numbering** — Merge request numbers are sequential per repository
-4. **Cascading deletes** — Deleting a user/org/repo cascades to all dependent data
+4. **Cascading deletes** — Deleting an owner cascades through `owners → users/organizations → repositories → (MRs, collaborators, stars, webhooks, etc.)`. All enforced by foreign keys with `ON DELETE CASCADE`.
 5. **Object immutability** — Objects in the shared store are never modified, only added or garbage-collected

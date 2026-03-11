@@ -1,10 +1,11 @@
 # LoomHub — API Design
 
-LoomHub exposes three API surfaces:
+LoomHub exposes two API surfaces:
 
-1. **Sync API** — Loom's native push/pull protocol (used by `loom push`/`loom pull`)
+1. **Sync API** — Implements Loom's native negotiate/push/pull protocol, routed by `{owner}/{repo}` (used by `loom push`/`loom pull`)
 2. **REST API** — CRUD for hub-level resources (users, repos, merge requests, etc.)
-3. **Web UI** — Server-rendered HTML pages
+
+The Vue SPA is served as static files and consumes the REST API.
 
 All APIs share the same HTTP server and authentication layer.
 
@@ -13,9 +14,8 @@ All APIs share the same HTTP server and authentication layer.
 ## Base URL & Versioning
 
 ```
-https://hub.example.com/api/v1/...     # REST API
-https://hub.example.com/api/v1/sync/...  # Sync API
-https://hub.example.com/{owner}/{repo}   # Web UI
+https://hub.example.com/api/v1/...       # REST API + Sync API
+https://hub.example.com/                 # Vue SPA (static files)
 ```
 
 ---
@@ -42,15 +42,32 @@ https://hub.example.com/{owner}/{repo}   # Web UI
 
 ## Sync API
 
-These endpoints implement Loom's native sync protocol. The `loom` CLI calls these directly.
+These endpoints implement Loom's native sync protocol exactly as defined in [Loom's sync spec](../../loom/docs/06-systems/sync.md). The `loom` CLI calls these directly.
+
+LoomHub maps `{owner}/{repo}` to a `project_id` internally — the sync handler resolves the repo, then delegates to the standard Loom protocol types.
+
+> **Design decision:** LoomHub does NOT extend or modify Loom's sync protocol. The request/response types are identical to what `loom-server` uses. This ensures any `loom` client built to the Loom spec interoperates with LoomHub without changes.
+
+### Endpoint Routing
+
+Loom's native sync endpoints are:
+
+| Loom Endpoint | LoomHub Route |
+|---------------|--------------|
+| `POST /api/v1/negotiate` | `POST /api/v1/sync/{owner}/{repo}/negotiate` |
+| `POST /api/v1/push` | `POST /api/v1/sync/{owner}/{repo}/push` |
+| `POST /api/v1/pull` | `POST /api/v1/sync/{owner}/{repo}/pull` |
+
+The `{owner}/{repo}` prefix is LoomHub's routing layer. The sync handler strips it, resolves the repo's `project_id`, and injects it into the request before processing with standard Loom sync logic.
 
 ### POST `/api/v1/sync/{owner}/{repo}/negotiate`
 
 Find common ancestor and determine what needs to sync.
 
-**Request:**
+**Request** (matches `NegotiateRequest` from Loom):
 ```json
 {
+  "project_id": "my-app-id",
   "streams": [
     {
       "stream_id": "01HZ...",
@@ -61,14 +78,16 @@ Find common ancestor and determine what needs to sync.
 }
 ```
 
-**Response:**
+> Note: `project_id` is included per Loom's protocol. LoomHub validates it matches the resolved repo but primarily uses `{owner}/{repo}` for routing.
+
+**Response** (matches `NegotiateResponse` from Loom):
 ```json
 {
   "common_seqs": {
-    "main": 1100
+    "01HZ...": 1100
   },
   "server_seqs": {
-    "main": 1180
+    "01HZ...": 1180
   },
   "needs_push": true,
   "needs_pull": true
@@ -79,9 +98,10 @@ Find common ancestor and determine what needs to sync.
 
 Push operations and objects from client to server.
 
-**Request:**
+**Request** (matches `PushRequest` from Loom):
 ```json
 {
+  "project_id": "my-app-id",
   "stream_id": "01HZ...",
   "from_seq": 1100,
   "operations": [
@@ -104,29 +124,13 @@ Push operations and objects from client to server.
   "objects": [
     {
       "hash": "ab3def...",
-      "content": "<base64-encoded>",
-      "size": 4096,
-      "compressed": true
-    }
-  ],
-  "checkpoints": [
-    {
-      "id": "01HZ...",
-      "stream_id": "01HZ...",
-      "seq": 1234,
-      "title": "Add authentication",
-      "summary": "JWT-based auth system",
-      "author": "flakerimi",
-      "timestamp": "2026-03-12T10:35:00Z",
-      "source": "manual",
-      "spaces": [],
-      "parent_id": "01HY..."
+      "content": "<base64-encoded>"
     }
   ]
 }
 ```
 
-**Response:**
+**Response** (matches `PushResponse` from Loom):
 ```json
 {
   "ok": true,
@@ -135,24 +139,26 @@ Push operations and objects from client to server.
 }
 ```
 
+> **Server-side handling:** When objects arrive, LoomHub writes them to the shared object store (not per-repo). This is transparent to the client — the protocol is unchanged.
+
 ### POST `/api/v1/sync/{owner}/{repo}/pull`
 
 Pull new operations and objects from server to client.
 
-**Request:**
+**Request** (matches `PullRequest` from Loom):
 ```json
 {
+  "project_id": "my-app-id",
   "stream_id": "01HZ...",
   "from_seq": 1180
 }
 ```
 
-**Response:**
+**Response** (matches `PullResponse` from Loom):
 ```json
 {
   "operations": [...],
   "objects": [...],
-  "checkpoints": [...],
   "server_head": 1234
 }
 ```
