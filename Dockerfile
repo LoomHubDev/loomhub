@@ -7,6 +7,7 @@ RUN npm run build
 
 FROM golang:1.25-alpine AS builder
 WORKDIR /app
+# Cache buster: 20260312a
 COPY go.* ./
 RUN go mod download
 COPY . .
