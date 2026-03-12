@@ -30,7 +30,7 @@ func testServer(t *testing.T) *httptest.Server {
 	cfg.Auth.BcryptCost = 4 // fast for tests
 	cfg.Server.DataDir = t.TempDir()
 
-	srv := server.New(cfg, db)
+	srv := server.New(cfg, db, nil)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 	return ts

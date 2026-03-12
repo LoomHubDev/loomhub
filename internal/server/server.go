@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/LoomHubDev/loomhub/internal/api"
@@ -22,13 +20,13 @@ type Server struct {
 	db     *sql.DB
 }
 
-func New(cfg *config.Config, db *sql.DB) *Server {
+func New(cfg *config.Config, db *sql.DB, frontendFS fs.FS) *Server {
 	s := &Server{cfg: cfg, db: db}
-	s.setupRoutes()
+	s.setupRoutes(frontendFS)
 	return s
 }
 
-func (s *Server) setupRoutes() {
+func (s *Server) setupRoutes(frontendFS fs.FS) {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -175,31 +173,16 @@ func (s *Server) setupRoutes() {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	// SPA static file serving
-	frontendDir := findFrontendDir()
-	if frontendDir != "" {
-		r.NotFound(spaHandler(frontendDir))
+	// SPA static file serving from embedded frontend
+	if frontendFS != nil {
+		r.NotFound(spaHandler(frontendFS))
 	}
 
 	s.router = r
 }
 
-func findFrontendDir() string {
-	candidates := []string{
-		"/frontend/dist",       // Docker production
-		"frontend/dist",        // Local dev (relative to cwd)
-	}
-	for _, dir := range candidates {
-		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			return dir
-		}
-	}
-	return ""
-}
-
-func spaHandler(dir string) http.HandlerFunc {
-	fsys := os.DirFS(dir)
-	fileServer := http.FileServer(http.FS(fsys))
+func spaHandler(frontendFS fs.FS) http.HandlerFunc {
+	fileServer := http.FileServer(http.FS(frontendFS))
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
@@ -208,9 +191,8 @@ func spaHandler(dir string) http.HandlerFunc {
 		}
 
 		// Try to open the file
-		f, err := fs.Stat(fsys, path)
+		f, err := fs.Stat(frontendFS, path)
 		if err == nil && !f.IsDir() {
-			// Set proper cache headers for assets
 			if strings.HasPrefix(path, "assets/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
@@ -218,9 +200,14 @@ func spaHandler(dir string) http.HandlerFunc {
 			return
 		}
 
-		// SPA fallback: serve index.html for all non-file routes
-		indexPath := filepath.Join(dir, "index.html")
-		http.ServeFile(w, r, indexPath)
+		// SPA fallback: serve index.html
+		index, err := fs.ReadFile(frontendFS, "index.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(index)
 	}
 }
 

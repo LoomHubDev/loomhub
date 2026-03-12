@@ -1,0 +1,113 @@
+package main
+
+import (
+	"fmt"
+	"io/fs"
+	"os"
+
+	loomhub "github.com/LoomHubDev/loomhub"
+	"github.com/LoomHubDev/loomhub/internal/config"
+	"github.com/LoomHubDev/loomhub/internal/database"
+	"github.com/LoomHubDev/loomhub/internal/server"
+	"github.com/spf13/cobra"
+)
+
+var version = "0.1.0"
+
+func main() {
+	root := &cobra.Command{
+		Use:     "loomhub",
+		Short:   "LoomHub — hosting platform for Loom",
+		Version: version,
+	}
+
+	root.AddCommand(serveCmd())
+	root.AddCommand(migrateCmd())
+
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func serveCmd() *cobra.Command {
+	var configPath string
+	var dataDir string
+	var port int
+	var host string
+	var dev bool
+
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Start the LoomHub server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load(configPath)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+
+			// CLI flags override config
+			if cmd.Flags().Changed("data") {
+				cfg.Server.DataDir = dataDir
+			}
+			if cmd.Flags().Changed("port") {
+				cfg.Server.Port = port
+			}
+			if cmd.Flags().Changed("host") {
+				cfg.Server.Host = host
+			}
+			if cmd.Flags().Changed("dev") {
+				cfg.Server.Dev = dev
+			}
+
+			db, err := database.OpenHub(cfg.Server.DataDir)
+			if err != nil {
+				return fmt.Errorf("open database: %w", err)
+			}
+			defer db.Close()
+
+			if err := database.Migrate(db); err != nil {
+				return fmt.Errorf("migrate: %w", err)
+			}
+
+			frontendFS, _ := fs.Sub(loomhub.FrontendDist, "frontend/dist")
+			srv := server.New(cfg, db, frontendFS)
+			addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+			fmt.Printf("LoomHub v%s listening on %s\n", version, addr)
+			return srv.ListenAndServe(addr)
+		},
+	}
+
+	cmd.Flags().StringVar(&configPath, "config", "config.toml", "Path to config file")
+	cmd.Flags().StringVar(&dataDir, "data", "./data", "Data directory")
+	cmd.Flags().IntVar(&port, "port", 3000, "HTTP port")
+	cmd.Flags().StringVar(&host, "host", "0.0.0.0", "Bind address")
+	cmd.Flags().BoolVar(&dev, "dev", false, "Development mode")
+
+	return cmd
+}
+
+func migrateCmd() *cobra.Command {
+	var dataDir string
+
+	cmd := &cobra.Command{
+		Use:   "migrate",
+		Short: "Run database migrations",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := database.OpenHub(dataDir)
+			if err != nil {
+				return fmt.Errorf("open database: %w", err)
+			}
+			defer db.Close()
+
+			if err := database.Migrate(db); err != nil {
+				return fmt.Errorf("migrate: %w", err)
+			}
+
+			fmt.Println("Migrations complete.")
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&dataDir, "data", "./data", "Data directory")
+	return cmd
+}

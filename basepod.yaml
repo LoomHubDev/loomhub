@@ -1,15 +1,10 @@
 name: loomhub
-type: container
-domain: loomhub.dev
+server: bp.common.al
 port: 8080
-
+domains:
+  - loomhub.dev
 build:
   dockerfile: Dockerfile
   context: .
-
 volumes:
-  - data:/data
-
-resources:
-  memory: 512m
-  cpus: 1.0
+  - loomhub-data:/app/data
