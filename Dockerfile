@@ -16,6 +16,7 @@ RUN CGO_ENABLED=0 go build -o main ./cmd/loomhub
 
 FROM alpine:latest
 WORKDIR /app
+ARG CACHE_BUST=1
 COPY --from=builder /app/main /app/main
 EXPOSE 8080
 CMD ["/app/main", "serve", "--port", "8080"]
