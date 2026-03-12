@@ -17,4 +17,4 @@ FROM alpine:latest
 WORKDIR /app
 COPY --from=builder /app/main /app/main
 EXPOSE 8080
-CMD ["/app/main", "serve"]
+CMD ["/app/main", "serve", "--port", "8080"]
