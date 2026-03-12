@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const menuOpen = ref(false)
+const createOpen = ref(false)
 </script>
 
 <template>
@@ -28,6 +29,23 @@ const menuOpen = ref(false)
           >
             Admin
           </RouterLink>
+          <div class="relative">
+            <button
+              @click="createOpen = !createOpen"
+              class="w-8 h-8 flex items-center justify-center rounded-md border border-gray-700 hover:border-gray-500 text-gray-400 hover:text-white transition-colors"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            </button>
+            <div v-if="createOpen" class="absolute right-0 mt-2 w-48 bg-gray-900 border border-gray-700 rounded-md shadow-lg py-1 z-50">
+              <RouterLink
+                to="/new/org"
+                @click="createOpen = false"
+                class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white"
+              >
+                New organization
+              </RouterLink>
+            </div>
+          </div>
           <RouterLink
             to="/settings/profile"
             class="text-sm text-gray-400 hover:text-gray-200 transition-colors"
@@ -71,6 +89,7 @@ const menuOpen = ref(false)
       <RouterLink to="/explore" @click="menuOpen = false" class="block text-sm text-gray-400 hover:text-gray-200 py-1">Explore</RouterLink>
       <template v-if="auth.isAuthenticated">
         <RouterLink :to="`/${auth.user?.username}`" @click="menuOpen = false" class="block text-sm text-gray-400 hover:text-gray-200 py-1">Profile</RouterLink>
+        <RouterLink to="/new/org" @click="menuOpen = false" class="block text-sm text-gray-400 hover:text-gray-200 py-1">New organization</RouterLink>
         <RouterLink to="/settings/profile" @click="menuOpen = false" class="block text-sm text-gray-400 hover:text-gray-200 py-1">Settings</RouterLink>
         <RouterLink v-if="auth.user?.is_admin" to="/admin" @click="menuOpen = false" class="block text-sm text-gray-400 hover:text-gray-200 py-1">Admin</RouterLink>
         <button @click="auth.logout(); menuOpen = false" class="block text-sm text-gray-400 hover:text-gray-200 py-1">Sign out</button>

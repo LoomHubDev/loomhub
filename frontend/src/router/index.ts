@@ -11,6 +11,7 @@ export const router = createRouter({
         { path: 'explore', name: 'explore', component: () => import('@/views/Explore.vue') },
         { path: 'login', name: 'login', component: () => import('@/views/Login.vue') },
         { path: 'register', name: 'register', component: () => import('@/views/Register.vue') },
+        { path: 'new/org', name: 'new-org', component: () => import('@/views/NewOrg.vue') },
         { path: 'settings/profile', name: 'settings-profile', component: () => import('@/views/settings/ProfileSettings.vue') },
         { path: 'settings/tokens', name: 'settings-tokens', component: () => import('@/views/settings/TokenSettings.vue') },
         {
@@ -41,7 +42,7 @@ export const router = createRouter({
             { path: 'settings/labels', name: 'loom-settings-labels', component: () => import('@/views/loom/SettingsLabels.vue') },
           ],
         },
-        { path: ':owner', name: 'profile', component: () => import('@/views/Profile.vue') },
+        { path: ':owner', name: 'profile', component: () => import('@/views/OwnerProfile.vue') },
       ],
     },
     {
