@@ -1,6 +1,15 @@
 name: loomhub
 type: container
+domain: loomhub.dev
 port: 8080
 
 build:
   dockerfile: Dockerfile
+  context: .
+
+volumes:
+  - data:/data
+
+resources:
+  memory: 512m
+  cpus: 1.0
