@@ -2,7 +2,11 @@ package server
 
 import (
 	"database/sql"
+	"io/fs"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/LoomHubDev/loomhub/internal/api"
 	"github.com/LoomHubDev/loomhub/internal/auth"
@@ -171,7 +175,53 @@ func (s *Server) setupRoutes() {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
+	// SPA static file serving
+	frontendDir := findFrontendDir()
+	if frontendDir != "" {
+		r.NotFound(spaHandler(frontendDir))
+	}
+
 	s.router = r
+}
+
+func findFrontendDir() string {
+	candidates := []string{
+		"/frontend/dist",       // Docker production
+		"frontend/dist",        // Local dev (relative to cwd)
+	}
+	for _, dir := range candidates {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	return ""
+}
+
+func spaHandler(dir string) http.HandlerFunc {
+	fsys := os.DirFS(dir)
+	fileServer := http.FileServer(http.FS(fsys))
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path == "" {
+			path = "index.html"
+		}
+
+		// Try to open the file
+		f, err := fs.Stat(fsys, path)
+		if err == nil && !f.IsDir() {
+			// Set proper cache headers for assets
+			if strings.HasPrefix(path, "assets/") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			}
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		// SPA fallback: serve index.html for all non-file routes
+		indexPath := filepath.Join(dir, "index.html")
+		http.ServeFile(w, r, indexPath)
+	}
 }
 
 func (s *Server) Handler() http.Handler {

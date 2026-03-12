@@ -15,5 +15,6 @@ RUN CGO_ENABLED=0 go build -o loomhub ./cmd/loomhub
 
 FROM alpine:latest
 COPY --from=backend /app/loomhub /loomhub
+COPY --from=frontend /app/frontend/dist /frontend/dist
 EXPOSE 8080
 CMD ["/loomhub", "serve"]
