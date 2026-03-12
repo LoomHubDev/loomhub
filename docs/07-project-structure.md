@@ -19,14 +19,14 @@ loomhub/
 │   ├── database/
 │   │   ├── hub.go                  # Hub database init & migrations
 │   │   ├── schema.go               # Hub schema definitions
-│   │   └── repo.go                 # Per-repo Loom database access
+│   │   └── loom.go                 # Per-loom Loom database access
 │   │
 │   ├── models/
 │   │   ├── owner.go                # Owner (shared namespace)
 │   │   ├── user.go                 # User, SSHKey, AccessToken
 │   │   ├── org.go                  # Organization, OrgMember
-│   │   ├── repo.go                 # Repository, Collaborator
-│   │   ├── merge_request.go        # MergeRequest, Comment, Review
+│   │   ├── loom.go                 # Loom, Collaborator
+│   │   ├── weave_request.go        # WeaveRequest, Comment, Review
 │   │   ├── webhook.go              # Webhook, Delivery
 │   │   ├── activity.go             # Activity feed
 │   │   └── label.go                # Labels
@@ -35,13 +35,13 @@ loomhub/
 │   │   ├── owners.go               # Owner namespace CRUD
 │   │   ├── users.go                # User CRUD
 │   │   ├── orgs.go                 # Org CRUD
-│   │   ├── repos.go                # Repo CRUD
-│   │   ├── merge_requests.go       # MR CRUD
+│   │   ├── looms.go                # Loom CRUD
+│   │   ├── weave_requests.go       # WR CRUD
 │   │   ├── comments.go             # Comment CRUD
 │   │   ├── reviews.go              # Review CRUD
 │   │   ├── webhooks.go             # Webhook CRUD
 │   │   ├── activities.go           # Activity logging
-│   │   ├── stars.go                # Stars
+│   │   ├── pins.go                 # Pins
 │   │   └── tokens.go               # Access tokens
 │   │
 │   ├── auth/
@@ -51,19 +51,19 @@ loomhub/
 │   │   └── permissions.go          # Permission checks
 │   │
 │   ├── sync/
-│   │   ├── handler.go              # Negotiate/push/pull HTTP handlers
+│   │   ├── handler.go              # Negotiate/send/receive HTTP handlers
 │   │   ├── negotiate.go            # Negotiate logic
-│   │   ├── push.go                 # Push logic (receive ops + objects)
-│   │   ├── pull.go                 # Pull logic (send ops + objects)
+│   │   ├── send.go                 # Send logic (receive ops + objects from client)
+│   │   ├── receive.go              # Receive logic (send ops + objects to client)
 │   │   └── objects.go              # Shared object store management
 │   │
 │   ├── api/
 │   │   ├── router.go               # REST API router setup
 │   │   ├── users.go                # User endpoints
 │   │   ├── orgs.go                 # Org endpoints
-│   │   ├── repos.go                # Repo endpoints
+│   │   ├── looms.go                # Loom endpoints
 │   │   ├── content.go              # Entity/checkpoint/log endpoints
-│   │   ├── merge_requests.go       # MR endpoints
+│   │   ├── weave_requests.go       # WR endpoints
 │   │   ├── search.go               # Search endpoints
 │   │   ├── webhooks.go             # Webhook endpoints
 │   │   └── middleware.go           # API middleware (JSON, pagination, CORS)
@@ -99,7 +99,7 @@ loomhub/
 │
 ├── test/
 │   ├── integration/
-│   │   ├── sync_test.go            # Push/pull integration tests
+│   │   ├── sync_test.go            # Send/receive integration tests
 │   │   ├── api_test.go             # REST API tests
 │   │   └── helpers_test.go         # Test helpers
 │   └── testutil/
@@ -224,8 +224,8 @@ import "embed"
 var frontendDist embed.FS
 
 func (s *Server) setupRoutes() {
-    // Sync API routes (per-repo, Loom protocol)
-    s.router.Route("/{owner}/{repo}/api/v1", s.syncRoutes)
+    // Sync API routes (per-loom, Loom protocol)
+    s.router.Route("/{owner}/{loom}/api/v1", s.syncRoutes)
 
     // Hub API routes
     s.router.Route("/api/v1", s.apiRoutes)
@@ -269,7 +269,7 @@ loomhub info
 [server]
 host = "0.0.0.0"
 port = 3000
-base_url = "https://hub.example.com"
+base_url = "https://loomhub.dev"
 data_dir = "/var/lib/loomhub"
 
 [auth]
@@ -280,8 +280,8 @@ registration_open = true
 
 [storage]
 max_object_size = "100MB"
-max_push_size = "500MB"
-max_repos_per_user = 100
+max_send_size = "500MB"
+max_looms_per_user = 100
 
 [rate_limit]
 enabled = true
@@ -296,7 +296,7 @@ format = "text"              # text, json
 
 ## Development Workflow
 
-1. Clone repo
+1. Replicate the loom
 2. Install Go 1.23+, Node.js 20+
 3. `cd frontend && npm install`
 4. Terminal 1: `go run ./cmd/loomhub serve --dev` (backend on :3000)

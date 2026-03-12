@@ -2,8 +2,8 @@
 
 LoomHub exposes two API surfaces:
 
-1. **Sync API** — Implements Loom's native negotiate/push/pull protocol, routed by `{owner}/{repo}` (used by `loom push`/`loom pull`)
-2. **REST API** — CRUD for hub-level resources (users, repos, merge requests, etc.)
+1. **Sync API** — Implements Loom's native negotiate/send/receive protocol, routed by `{owner}/{loom}` (used by `loom send`/`loom receive`)
+2. **REST API** — CRUD for hub-level resources (users, looms, weave requests, etc.)
 
 The Vue SPA is served as static files and consumes the REST API.
 
@@ -14,9 +14,9 @@ All APIs share the same HTTP server and authentication layer.
 ## Base URL & Versioning
 
 ```
-https://hub.example.com/api/v1/...                     # REST API (hub-level)
-https://hub.example.com/{owner}/{repo}/api/v1/...      # Sync API (per-repo)
-https://hub.example.com/                               # Vue SPA (static files)
+https://loomhub.dev/api/v1/...                     # REST API (hub-level)
+https://loomhub.dev/{owner}/{loom}/api/v1/...      # Sync API (per-loom)
+https://loomhub.dev/                               # Vue SPA (static files)
 ```
 
 ---
@@ -35,9 +35,9 @@ https://hub.example.com/                               # Vue SPA (static files)
 
 | Scope | Access |
 |-------|--------|
-| `read` | Read public + private repos the user has access to |
-| `write` | Push to repos, create MRs, post comments |
-| `admin` | Manage repos, users, webhooks, permissions |
+| `read` | Read public + private looms the user has access to |
+| `write` | Send to looms, create WRs, post comments |
+| `admin` | Manage looms, users, webhooks, permissions |
 
 ---
 
@@ -49,45 +49,45 @@ These endpoints implement Loom's native sync protocol as defined in [Loom's sync
 
 ### How Loom CLI Reaches LoomHub
 
-Loom's sync endpoints are at fixed paths (`/api/v1/negotiate`, `/api/v1/push`, `/api/v1/pull`). The Loom client constructs these from the remote URL base. When a user adds a LoomHub remote:
+Loom's sync endpoints are at fixed paths (`/api/v1/negotiate`, `/api/v1/push`, `/api/v1/pull`). The Loom client constructs these from the hub URL base. When a user adds a LoomHub hub:
 
 ```bash
-loom remote add origin https://hub.example.com/flakerimi/my-app
+loom hub add origin https://loomhub.dev/flakerimi/my-app
 ```
 
-The Loom client uses `https://hub.example.com/flakerimi/my-app` as the base URL and appends the standard sync paths:
+The Loom client uses `https://loomhub.dev/flakerimi/my-app` as the base URL and appends the standard sync paths:
 
 ```
-POST https://hub.example.com/flakerimi/my-app/api/v1/negotiate
-POST https://hub.example.com/flakerimi/my-app/api/v1/push
-POST https://hub.example.com/flakerimi/my-app/api/v1/pull
+POST https://loomhub.dev/flakerimi/my-app/api/v1/negotiate
+POST https://loomhub.dev/flakerimi/my-app/api/v1/push
+POST https://loomhub.dev/flakerimi/my-app/api/v1/pull
 ```
 
-This matches how Loom's sync client already works — it uses the remote URL as the base, not a hardcoded server root. No Loom client changes are needed.
+This matches how Loom's sync client already works — it uses the hub URL as the base, not a hardcoded server root. No Loom client changes are needed.
 
 ### LoomHub Server Routing
 
-LoomHub routes these requests by extracting `{owner}/{repo}` from the path prefix:
+LoomHub routes these requests by extracting `{owner}/{loom}` from the path prefix:
 
 | Incoming Request | Routing |
 |-----------------|---------|
-| `POST /{owner}/{repo}/api/v1/negotiate` | Resolve repo from `{owner}/{repo}`, handle negotiate |
-| `POST /{owner}/{repo}/api/v1/push` | Resolve repo, handle push |
-| `POST /{owner}/{repo}/api/v1/pull` | Resolve repo, handle pull |
+| `POST /{owner}/{loom}/api/v1/negotiate` | Resolve loom from `{owner}/{loom}`, handle negotiate |
+| `POST /{owner}/{loom}/api/v1/push` | Resolve loom, handle send |
+| `POST /{owner}/{loom}/api/v1/pull` | Resolve loom, handle receive |
 
 ```go
 // Router setup
-r.Route("/{owner}/{repo}/api/v1", func(r chi.Router) {
-    r.Use(resolveRepoMiddleware) // extracts owner/repo, loads repo DB
+r.Route("/{owner}/{loom}/api/v1", func(r chi.Router) {
+    r.Use(resolveLoomMiddleware) // extracts owner/loom, loads loom DB
     r.Post("/negotiate", s.handleNegotiate)
-    r.Post("/push", s.handlePush)
-    r.Post("/pull", s.handlePull)
+    r.Post("/push", s.handleSend)
+    r.Post("/pull", s.handleReceive)
 })
 ```
 
-The `resolveRepoMiddleware` resolves the `{owner}/{repo}` path into a repo database connection and injects it into the request context. The sync handlers then operate on the repo DB using Loom's standard protocol types — no translation needed.
+The `resolveLoomMiddleware` resolves the `{owner}/{loom}` path into a loom database connection and injects it into the request context. The sync handlers then operate on the loom DB using Loom's standard protocol types — no translation needed.
 
-### POST `/{owner}/{repo}/api/v1/negotiate`
+### POST `/{owner}/{loom}/api/v1/negotiate`
 
 Find common ancestor and determine what needs to sync.
 
@@ -105,7 +105,7 @@ Find common ancestor and determine what needs to sync.
 }
 ```
 
-> Note: `project_id` is included per Loom's protocol. LoomHub validates it matches the resolved repo but primarily uses `{owner}/{repo}` for routing.
+> Note: `project_id` is included per Loom's protocol. LoomHub validates it matches the resolved loom but primarily uses `{owner}/{loom}` for routing.
 
 **Response** (matches `NegotiateResponse` from Loom):
 ```json
@@ -121,9 +121,9 @@ Find common ancestor and determine what needs to sync.
 }
 ```
 
-### POST `/{owner}/{repo}/api/v1/push`
+### POST `/{owner}/{loom}/api/v1/push`
 
-Push operations and objects from client to server.
+Send operations and objects from client to server.
 
 **Request** (matches `PushRequest` from Loom):
 ```json
@@ -166,11 +166,11 @@ Push operations and objects from client to server.
 }
 ```
 
-> **Server-side handling:** When objects arrive, LoomHub writes them to the shared object store (not per-repo). This is transparent to the client — the protocol is unchanged.
+> **Server-side handling:** When objects arrive, LoomHub writes them to the shared object store (not per-loom). This is transparent to the client — the protocol is unchanged.
 
-### POST `/{owner}/{repo}/api/v1/pull`
+### POST `/{owner}/{loom}/api/v1/pull`
 
-Pull new operations and objects from server to client.
+Receive new operations and objects from server to client.
 
 **Request** (matches `PullRequest` from Loom):
 ```json
@@ -202,8 +202,8 @@ Pull new operations and objects from server to client.
 | GET | `/api/v1/users/{username}` | Get user profile |
 | PATCH | `/api/v1/user` | Update authenticated user's profile |
 | GET | `/api/v1/user` | Get authenticated user |
-| GET | `/api/v1/user/repos` | List authenticated user's repos |
-| GET | `/api/v1/users/{username}/repos` | List user's public repos |
+| GET | `/api/v1/user/looms` | List authenticated user's looms |
+| GET | `/api/v1/users/{username}/looms` | List user's public looms |
 
 #### POST `/api/v1/users` — Register
 
@@ -237,19 +237,19 @@ Pull new operations and objects from server to client.
 | GET | `/api/v1/orgs/{name}/members` | List members |
 | PUT | `/api/v1/orgs/{name}/members/{username}` | Add member |
 | DELETE | `/api/v1/orgs/{name}/members/{username}` | Remove member |
-| GET | `/api/v1/orgs/{name}/repos` | List org repos |
+| GET | `/api/v1/orgs/{name}/looms` | List org looms |
 
-### Repositories
+### Looms
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/repos` | Create repository |
-| GET | `/api/v1/repos/{owner}/{repo}` | Get repository |
-| PATCH | `/api/v1/repos/{owner}/{repo}` | Update repository |
-| DELETE | `/api/v1/repos/{owner}/{repo}` | Delete repository |
-| POST | `/api/v1/repos/{owner}/{repo}/fork` | Fork repository |
+| POST | `/api/v1/looms` | Create loom |
+| GET | `/api/v1/looms/{owner}/{loom}` | Get loom |
+| PATCH | `/api/v1/looms/{owner}/{loom}` | Update loom |
+| DELETE | `/api/v1/looms/{owner}/{loom}` | Delete loom |
+| POST | `/api/v1/looms/{owner}/{loom}/spin` | Spin a loom |
 
-#### POST `/api/v1/repos` — Create Repository
+#### POST `/api/v1/looms` — Create Loom
 
 ```json
 // Request
@@ -269,29 +269,29 @@ Pull new operations and objects from server to client.
   "description": "My application",
   "visibility": "public",
   "default_stream": "main",
-  "clone_url": "https://hub.example.com/flakerimi/my-app",
+  "replicate_url": "https://loomhub.dev/flakerimi/my-app",
   "created_at": "2026-03-12T10:00:00Z"
 }
 ```
 
-### Repository Content
+### Loom Content
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/repos/{owner}/{repo}/streams` | List streams |
-| GET | `/api/v1/repos/{owner}/{repo}/streams/{name}` | Get stream |
-| GET | `/api/v1/repos/{owner}/{repo}/log` | Checkpoint log |
-| GET | `/api/v1/repos/{owner}/{repo}/checkpoints/{id}` | Get checkpoint |
-| GET | `/api/v1/repos/{owner}/{repo}/diff` | Diff between refs |
-| GET | `/api/v1/repos/{owner}/{repo}/entities` | List entities |
-| GET | `/api/v1/repos/{owner}/{repo}/entities/{path}` | Get entity content |
-| GET | `/api/v1/repos/{owner}/{repo}/operations` | List operations |
-| GET | `/api/v1/repos/{owner}/{repo}/search` | Search checkpoints |
+| GET | `/api/v1/looms/{owner}/{loom}/streams` | List streams |
+| GET | `/api/v1/looms/{owner}/{loom}/streams/{name}` | Get stream |
+| GET | `/api/v1/looms/{owner}/{loom}/log` | Checkpoint log |
+| GET | `/api/v1/looms/{owner}/{loom}/checkpoints/{id}` | Get checkpoint |
+| GET | `/api/v1/looms/{owner}/{loom}/diff` | Diff between refs |
+| GET | `/api/v1/looms/{owner}/{loom}/entities` | List entities |
+| GET | `/api/v1/looms/{owner}/{loom}/entities/{path}` | Get entity content |
+| GET | `/api/v1/looms/{owner}/{loom}/operations` | List operations |
+| GET | `/api/v1/looms/{owner}/{loom}/search` | Search checkpoints |
 
-#### GET `/api/v1/repos/{owner}/{repo}/log` — Checkpoint Log
+#### GET `/api/v1/looms/{owner}/{loom}/log` — Checkpoint Log
 
 ```
-GET /api/v1/repos/flakerimi/my-app/log?stream=main&limit=20&offset=0
+GET /api/v1/looms/flakerimi/my-app/log?stream=main&limit=20&offset=0
 ```
 
 ```json
@@ -317,10 +317,10 @@ GET /api/v1/repos/flakerimi/my-app/log?stream=main&limit=20&offset=0
 }
 ```
 
-#### GET `/api/v1/repos/{owner}/{repo}/diff`
+#### GET `/api/v1/looms/{owner}/{loom}/diff`
 
 ```
-GET /api/v1/repos/flakerimi/my-app/diff?from=01HX...&to=01HZ...&space=code
+GET /api/v1/looms/flakerimi/my-app/diff?from=01HX...&to=01HZ...&space=code
 ```
 
 ```json
@@ -362,12 +362,12 @@ GET /api/v1/repos/flakerimi/my-app/diff?from=01HX...&to=01HZ...&space=code
 }
 ```
 
-#### GET `/api/v1/repos/{owner}/{repo}/entities`
+#### GET `/api/v1/looms/{owner}/{loom}/entities`
 
 Browse entities at a checkpoint or stream head.
 
 ```
-GET /api/v1/repos/flakerimi/my-app/entities?stream=main&space=code&path=src/
+GET /api/v1/looms/flakerimi/my-app/entities?stream=main&space=code&path=src/
 ```
 
 ```json
@@ -390,19 +390,19 @@ GET /api/v1/repos/flakerimi/my-app/entities?stream=main&space=code&path=src/
 }
 ```
 
-### Merge Requests
+### Weave Requests
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/repos/{owner}/{repo}/merge-requests` | Create MR |
-| GET | `/api/v1/repos/{owner}/{repo}/merge-requests` | List MRs |
-| GET | `/api/v1/repos/{owner}/{repo}/merge-requests/{number}` | Get MR |
-| PATCH | `/api/v1/repos/{owner}/{repo}/merge-requests/{number}` | Update MR |
-| POST | `/api/v1/repos/{owner}/{repo}/merge-requests/{number}/merge` | Merge |
-| POST | `/api/v1/repos/{owner}/{repo}/merge-requests/{number}/close` | Close |
-| GET | `/api/v1/repos/{owner}/{repo}/merge-requests/{number}/diff` | MR diff |
+| POST | `/api/v1/looms/{owner}/{loom}/weave-requests` | Create WR |
+| GET | `/api/v1/looms/{owner}/{loom}/weave-requests` | List WRs |
+| GET | `/api/v1/looms/{owner}/{loom}/weave-requests/{number}` | Get WR |
+| PATCH | `/api/v1/looms/{owner}/{loom}/weave-requests/{number}` | Update WR |
+| POST | `/api/v1/looms/{owner}/{loom}/weave-requests/{number}/weave` | Weave |
+| POST | `/api/v1/looms/{owner}/{loom}/weave-requests/{number}/close` | Close |
+| GET | `/api/v1/looms/{owner}/{loom}/weave-requests/{number}/diff` | WR diff |
 
-#### POST — Create Merge Request
+#### POST — Create Weave Request
 
 ```json
 // Request
@@ -434,42 +434,42 @@ GET /api/v1/repos/flakerimi/my-app/entities?stream=main&space=code&path=src/
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/repos/{owner}/{repo}/merge-requests/{number}/comments` | List comments |
-| POST | `/api/v1/repos/{owner}/{repo}/merge-requests/{number}/comments` | Add comment |
-| PATCH | `/api/v1/repos/{owner}/{repo}/merge-requests/{number}/comments/{id}` | Edit comment |
-| DELETE | `/api/v1/repos/{owner}/{repo}/merge-requests/{number}/comments/{id}` | Delete comment |
+| GET | `/api/v1/looms/{owner}/{loom}/weave-requests/{number}/comments` | List comments |
+| POST | `/api/v1/looms/{owner}/{loom}/weave-requests/{number}/comments` | Add comment |
+| PATCH | `/api/v1/looms/{owner}/{loom}/weave-requests/{number}/comments/{id}` | Edit comment |
+| DELETE | `/api/v1/looms/{owner}/{loom}/weave-requests/{number}/comments/{id}` | Delete comment |
 
 ### Reviews
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/repos/{owner}/{repo}/merge-requests/{number}/reviews` | Submit review |
-| GET | `/api/v1/repos/{owner}/{repo}/merge-requests/{number}/reviews` | List reviews |
+| POST | `/api/v1/looms/{owner}/{loom}/weave-requests/{number}/reviews` | Submit review |
+| GET | `/api/v1/looms/{owner}/{loom}/weave-requests/{number}/reviews` | List reviews |
 
-### Stars
+### Pins
 
 | Method | Path | Description |
 |--------|------|-------------|
-| PUT | `/api/v1/repos/{owner}/{repo}/star` | Star repo |
-| DELETE | `/api/v1/repos/{owner}/{repo}/star` | Unstar repo |
-| GET | `/api/v1/user/starred` | List starred repos |
+| PUT | `/api/v1/looms/{owner}/{loom}/pin` | Pin loom |
+| DELETE | `/api/v1/looms/{owner}/{loom}/pin` | Unpin loom |
+| GET | `/api/v1/user/pinned` | List pinned looms |
 
 ### Webhooks
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/repos/{owner}/{repo}/webhooks` | Create webhook |
-| GET | `/api/v1/repos/{owner}/{repo}/webhooks` | List webhooks |
-| PATCH | `/api/v1/repos/{owner}/{repo}/webhooks/{id}` | Update webhook |
-| DELETE | `/api/v1/repos/{owner}/{repo}/webhooks/{id}` | Delete webhook |
-| GET | `/api/v1/repos/{owner}/{repo}/webhooks/{id}/deliveries` | Delivery log |
-| POST | `/api/v1/repos/{owner}/{repo}/webhooks/{id}/test` | Test webhook |
+| POST | `/api/v1/looms/{owner}/{loom}/webhooks` | Create webhook |
+| GET | `/api/v1/looms/{owner}/{loom}/webhooks` | List webhooks |
+| PATCH | `/api/v1/looms/{owner}/{loom}/webhooks/{id}` | Update webhook |
+| DELETE | `/api/v1/looms/{owner}/{loom}/webhooks/{id}` | Delete webhook |
+| GET | `/api/v1/looms/{owner}/{loom}/webhooks/{id}/deliveries` | Delivery log |
+| POST | `/api/v1/looms/{owner}/{loom}/webhooks/{id}/test` | Test webhook |
 
 ### Search
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/search/repos` | Search repositories |
+| GET | `/api/v1/search/looms` | Search looms |
 | GET | `/api/v1/search/users` | Search users |
 | GET | `/api/v1/search/checkpoints` | Search checkpoints |
 
@@ -483,25 +483,25 @@ When configured events occur, LoomHub sends POST requests to webhook URLs.
 
 | Event | Trigger | Payload |
 |-------|---------|---------|
-| `push` | Operations pushed to repo | Stream info, operation count, checkpoint list |
+| `send` | Operations sent to loom | Stream info, operation count, checkpoint list |
 | `checkpoint` | New checkpoint created | Checkpoint details |
-| `merge_request` | MR opened/closed/merged | MR details, action type |
+| `weave_request` | WR opened/closed/woven | WR details, action type |
 | `review` | Review submitted | Review details |
 | `comment` | Comment posted | Comment details |
-| `star` | Repo starred/unstarred | User, action |
-| `fork` | Repo forked | Fork details |
+| `pin` | Loom pinned/unpinned | User, action |
+| `spin` | Loom spun | Spin details |
 
 ### Webhook Payload Format
 
 ```json
 {
-  "event": "push",
+  "event": "send",
   "timestamp": "2026-03-12T10:35:00Z",
   "sender": {
     "id": "01HZ...",
     "username": "flakerimi"
   },
-  "repository": {
+  "loom": {
     "id": "01HZ...",
     "full_name": "flakerimi/my-app"
   },
@@ -523,7 +523,7 @@ When configured events occur, LoomHub sends POST requests to webhook URLs.
 Signed with HMAC-SHA256:
 ```
 X-LoomHub-Signature: sha256=<hex-digest>
-X-LoomHub-Event: push
+X-LoomHub-Event: send
 X-LoomHub-Delivery: <delivery-id>
 ```
 
@@ -534,7 +534,7 @@ X-LoomHub-Delivery: <delivery-id>
 All list endpoints support cursor-based pagination:
 
 ```
-GET /api/v1/repos/flakerimi/my-app/log?limit=20&after=01HZ...
+GET /api/v1/looms/flakerimi/my-app/log?limit=20&after=01HZ...
 ```
 
 Response includes:
@@ -553,7 +553,7 @@ Response includes:
 {
   "error": {
     "code": "not_found",
-    "message": "Repository not found",
+    "message": "Loom not found",
     "details": {}
   }
 }

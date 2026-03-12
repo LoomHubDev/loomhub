@@ -6,7 +6,7 @@ Phased implementation plan, from MVP to full platform.
 
 ## Phase 1 — Foundation (MVP)
 
-Minimal viable server: push, pull, and browse repos.
+Minimal viable server: send, receive, and browse looms.
 
 ### 1.1 Project Setup
 - [ ] Go module, dependencies, Makefile
@@ -20,48 +20,48 @@ Minimal viable server: push, pull, and browse repos.
 - [ ] Auth middleware
 - [ ] Access tokens (for CLI)
 
-### 1.3 Repository Management
-- [ ] Create repo (API + web)
-- [ ] List user repos
-- [ ] Delete repo
-- [ ] Repo settings (name, description, visibility)
+### 1.3 Loom Management
+- [ ] Create loom (API + web)
+- [ ] List user looms
+- [ ] Delete loom
+- [ ] Loom settings (name, description, visibility)
 
 ### 1.4 Sync Protocol
 - [ ] Negotiate endpoint
-- [ ] Push endpoint (receive operations + objects)
-- [ ] Pull endpoint (send operations + objects)
+- [ ] Send endpoint (receive operations + objects from client)
+- [ ] Receive endpoint (send operations + objects to client)
 - [ ] Shared object store
-- [ ] Per-repo Loom database management
+- [ ] Per-loom Loom database management
 
 ### 1.5 Web UI — Basics
 - [ ] Landing page
 - [ ] Login / register pages
 - [ ] User profile page
-- [ ] Repo overview page
+- [ ] Loom overview page
 - [ ] Entity tree browser
 - [ ] Entity content viewer (code highlighting, markdown)
 - [ ] Checkpoint log page
 
-**Milestone: Users can create accounts, push/pull Loom repos, and browse them on the web.**
+**Milestone: Users can create accounts, send/receive Loom projects, and browse them on the web.**
 
 ---
 
 ## Phase 2 — Collaboration
 
-Merge requests, reviews, and social features.
+Weave requests, reviews, and social features.
 
-### 2.1 Merge Requests
-- [ ] Create MR (stream → stream)
-- [ ] List / filter MRs
-- [ ] MR detail page with diff
-- [ ] MR comments (general + inline)
-- [ ] Merge / close MR
-- [ ] MR status tracking
+### 2.1 Weave Requests
+- [ ] Create WR (stream → stream)
+- [ ] List / filter WRs
+- [ ] WR detail page with diff
+- [ ] WR comments (general + inline)
+- [ ] Weave / close WR
+- [ ] WR status tracking
 
 ### 2.2 Reviews
 - [ ] Submit review (approve / request changes / comment)
-- [ ] Review summary on MR page
-- [ ] Review requirements for merge (optional)
+- [ ] Review summary on WR page
+- [ ] Review requirements for weave (optional)
 
 ### 2.3 Diff Viewer
 - [ ] Multi-space diff rendering
@@ -70,49 +70,49 @@ Merge requests, reviews, and social features.
 - [ ] Expand context around hunks
 
 ### 2.4 Social Features
-- [ ] Star repos
+- [ ] Pin looms
 - [ ] Activity feed (dashboard)
 - [ ] User activity on profile
 
 ### 2.5 Organizations
 - [ ] Create org
 - [ ] Org members (owner, admin, member)
-- [ ] Org repo ownership
+- [ ] Org loom ownership
 
-**Milestone: Teams can collaborate with merge requests, code review, and org-based ownership.**
+**Milestone: Teams can collaborate with weave requests, code review, and org-based ownership.**
 
 ---
 
 ## Phase 3 — Platform
 
-Webhooks, search, forks, and polish.
+Webhooks, search, spins, and polish.
 
 ### 3.1 Webhooks
 - [ ] Webhook CRUD
-- [ ] Event dispatch (push, checkpoint, MR, review)
+- [ ] Event dispatch (send, checkpoint, WR, review)
 - [ ] HMAC signing
 - [ ] Delivery log with retry
 - [ ] Test webhook button
 
 ### 3.2 Search
-- [ ] Repository search (name, description)
+- [ ] Loom search (name, description)
 - [ ] Checkpoint search (FTS on title/summary)
 - [ ] User search
 - [ ] Explore page (trending, recent)
 
-### 3.3 Forking
-- [ ] Fork repository
-- [ ] Cross-fork merge requests
-- [ ] Fork network visualization
+### 3.3 Spinning
+- [ ] Spin loom
+- [ ] Cross-spin weave requests
+- [ ] Spin network visualization
 
 ### 3.4 Labels & Milestones
-- [ ] Labels for MRs
+- [ ] Labels for WRs
 - [ ] Label filtering
 
 ### 3.5 Admin Panel
 - [ ] Admin dashboard (system stats)
 - [ ] User management
-- [ ] Repo management
+- [ ] Loom management
 - [ ] Server configuration
 
 ### 3.6 Polish
@@ -136,22 +136,22 @@ Webhooks, search, forks, and polish.
 
 ### 4.2 CI/CD Integration
 - [ ] Built-in runner system (or webhook-based)
-- [ ] Status checks on merge requests
+- [ ] Status checks on weave requests
 - [ ] Protected streams (require checks to pass)
 
 ### 4.3 Real-Time
-- [ ] SSE/WebSocket for live updates (MR comments, push events)
+- [ ] SSE/WebSocket for live updates (WR comments, send events)
 - [ ] Live collaboration indicators
 
 ### 4.4 API Extensions
 - [ ] GraphQL API
 - [ ] OAuth2 provider (third-party apps)
-- [ ] SSH-based push/pull
+- [ ] SSH-based send/receive
 
 ### 4.5 Import/Export
 - [ ] Import from Git/GitHub
 - [ ] Export to standard formats
-- [ ] Repository transfer between owners
+- [ ] Loom transfer between owners
 
 ---
 
@@ -168,12 +168,12 @@ For the initial build, implement in this order:
 6. internal/auth/                — JWT + passwords + middleware
 7. internal/server/              — HTTP server setup
 8. internal/api/users.go         — User registration + login endpoints
-9. internal/store/repos.go       — Repo CRUD
-10. internal/api/repos.go        — Repo endpoints
-11. internal/sync/               — Negotiate + push + pull
+9. internal/store/looms.go       — Loom CRUD
+10. internal/api/looms.go        — Loom endpoints
+11. internal/sync/               — Negotiate + send + receive
 12. internal/web/                — Web UI pages
-13. internal/store/merge_requests.go — MR CRUD
-14. internal/api/merge_requests.go   — MR endpoints
+13. internal/store/weave_requests.go — WR CRUD
+14. internal/api/weave_requests.go   — WR endpoints
 15. internal/webhook/            — Event dispatch
 ```
 

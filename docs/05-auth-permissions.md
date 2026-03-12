@@ -56,64 +56,64 @@ Request → Extract token (cookie or header)
         → Next handler
 ```
 
-Unauthenticated requests can access public repos (read-only).
+Unauthenticated requests can access public looms (read-only).
 
 ---
 
 ## Permission Model
 
-### Repository Access Levels
+### Loom Access Levels
 
 | Level | Capabilities |
 |-------|-------------|
-| **none** | No access (private repos) |
-| **read** | View repo, clone, pull |
-| **write** | Push, create streams, create MRs |
+| **none** | No access (private looms) |
+| **read** | View loom, replicate, receive |
+| **write** | Send, create streams, create WRs |
 | **admin** | Settings, collaborators, webhooks, delete |
 
 ### How Access Is Determined
 
-For a given user + repository, access is resolved in order:
+For a given user + loom, access is resolved in order:
 
 ```
 1. Is user a site admin?          → admin access to everything
-2. Is user the repo owner?        → admin access
-3. Is user a repo collaborator?   → collaborator's permission level
+2. Is user the loom owner?        → admin access
+3. Is user a loom collaborator?   → collaborator's permission level
 4. Is user an org member?         → based on org role:
    - owner/admin                  → admin access
-   - member                       → read access to all org repos
-5. Is repo public?                → read access
+   - member                       → read access to all org looms
+5. Is loom public?                → read access
 6. Otherwise                      → no access
 ```
 
-> Note: Repository visibility is `public` or `private`. Org members get read access to all org repos (including private ones). For write access, org members must be added as repo collaborators.
+> Note: Loom visibility is `public` or `private`. Org members get read access to all org looms (including private ones). For write access, org members must be added as loom collaborators.
 
 ### Organization Roles
 
-| Role | Repo Access | Org Management |
+| Role | Loom Access | Org Management |
 |------|------------|----------------|
-| **owner** | Admin to all org repos | Full org settings, billing, delete |
-| **admin** | Admin to all org repos | Manage members, create repos |
-| **member** | Read to all org repos | View members |
+| **owner** | Admin to all org looms | Full org settings, billing, delete |
+| **admin** | Admin to all org looms | Manage members, create looms |
+| **member** | Read to all org looms | View members |
 
-### Merge Request Permissions
+### Weave Request Permissions
 
 | Action | Required |
 |--------|----------|
-| View MR | Read access to repo |
-| Create MR | Write access to repo |
-| Comment on MR | Read access to repo |
-| Submit review | Read access to repo |
-| Merge MR | Write access + MR approved (or admin) |
-| Close MR | MR author or write access |
+| View WR | Read access to loom |
+| Create WR | Write access to loom |
+| Comment on WR | Read access to loom |
+| Submit review | Read access to loom |
+| Weave WR | Write access + WR approved (or admin) |
+| Close WR | WR author or write access |
 
 ### Sync Permissions
 
 | Action | Required |
 |--------|----------|
-| Pull (public repo) | No auth required |
-| Pull (private repo) | Read access |
-| Push | Write access |
+| Receive (public loom) | No auth required |
+| Receive (private loom) | Read access |
+| Send | Write access |
 
 ---
 
@@ -131,8 +131,8 @@ For a given user + repository, access is resolved in order:
 |----------|-------|
 | `/login` | 10 per minute per IP |
 | `/register` | 5 per hour per IP |
-| `/{owner}/{repo}/api/v1/push` | 60 per minute per user |
-| `/{owner}/{repo}/api/v1/pull` | 120 per minute per user |
+| `/{owner}/{loom}/api/v1/push` | 60 per minute per user |
+| `/{owner}/{loom}/api/v1/pull` | 120 per minute per user |
 | General API | 300 per minute per user |
 
 Implemented with token bucket per IP/user, stored in memory (no Redis needed).
@@ -175,6 +175,6 @@ enabled = true
 login_per_minute = 10
 register_per_hour = 5
 api_per_minute = 300
-sync_push_per_minute = 60
-sync_pull_per_minute = 120
+sync_send_per_minute = 60
+sync_receive_per_minute = 120
 ```

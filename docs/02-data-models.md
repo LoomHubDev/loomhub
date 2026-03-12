@@ -2,12 +2,12 @@
 
 LoomHub has two layers of data:
 
-1. **Hub-level** — Users, organizations, repositories, permissions, merge requests, webhooks (stored in a central Hub database)
-2. **Repo-level** — Operations, checkpoints, streams, entities, objects (stored in per-repo Loom databases, based on the local `.loom/` schema with a server-side adaptation layer)
+1. **Hub-level** — Users, organizations, looms, permissions, weave requests, webhooks (stored in a central Hub database)
+2. **Loom-level** — Operations, checkpoints, streams, entities, objects (stored in per-loom Loom databases, based on the local `.loom/` schema with a server-side adaptation layer)
 
-This document covers the Hub-level models. Repo-level models are defined by [Loom's data model](../../loom/docs/04-data-models.md).
+This document covers the Hub-level models. Loom-level models are defined by [Loom's data model](../../loom/docs/04-data-models.md).
 
-> **Note on storage compatibility:** Per-repo databases use the same *schema* as a local `.loom/` project (operations, checkpoints, streams, entities, metadata tables). However, object storage differs: locally, Loom stores objects on disk inside `.loom/objects/` with per-repo reference counts. On LoomHub, objects are stored in a **shared cross-repo object store** with a **global reference count table** in the hub database. The sync protocol handles this transparently — the `objects` table in each repo database stores the hash index, but actual blob storage is redirected to the shared store. See [Repository Hosting](06-repository-hosting.md) for details on this adaptation layer.
+> **Note on storage compatibility:** Per-loom databases use the same *schema* as a local `.loom/` project (operations, checkpoints, streams, entities, metadata tables). However, object storage differs: locally, Loom stores objects on disk inside `.loom/objects/` with per-loom reference counts. On LoomHub, objects are stored in a **shared cross-loom object store** with a **global reference count table** in the hub database. The sync protocol handles this transparently — the `objects` table in each loom database stores the hash index, but actual blob storage is redirected to the shared store. See [Loom Hosting](06-loom-hosting.md) for details on this adaptation layer.
 
 ---
 
@@ -15,7 +15,7 @@ This document covers the Hub-level models. Repo-level models are defined by [Loo
 
 ### Owners (Shared Namespace)
 
-Users and organizations share a single namespace for URL routing (`/{owner}/{repo}`). The `owners` table enforces this globally — no user and org can have the same name.
+Users and organizations share a single namespace for URL routing (`/{owner}/{loom}`). The `owners` table enforces this globally — no user and org can have the same name.
 
 ```sql
 CREATE TABLE owners (
@@ -115,112 +115,112 @@ CREATE TABLE org_members (
 CREATE INDEX idx_org_members_user ON org_members(user_id);
 ```
 
-### Repositories
+### Looms
 
 ```sql
-CREATE TABLE repositories (
+CREATE TABLE looms (
     id          TEXT PRIMARY KEY,       -- ULID
     owner_id    TEXT NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,           -- lowercase slug
     description TEXT NOT NULL DEFAULT '',
     visibility  TEXT NOT NULL DEFAULT 'public', -- public, private
     default_stream TEXT NOT NULL DEFAULT 'main',
-    disk_path   TEXT NOT NULL,           -- relative path to repo data on disk
+    disk_path   TEXT NOT NULL,           -- relative path to loom data on disk
     size_bytes  INTEGER NOT NULL DEFAULT 0,
 
     -- Stats (denormalized, updated periodically)
     checkpoint_count INTEGER NOT NULL DEFAULT 0,
     stream_count     INTEGER NOT NULL DEFAULT 0,
-    star_count       INTEGER NOT NULL DEFAULT 0,
-    fork_count       INTEGER NOT NULL DEFAULT 0,
+    pin_count        INTEGER NOT NULL DEFAULT 0,
+    spin_count       INTEGER NOT NULL DEFAULT 0,
 
-    forked_from TEXT REFERENCES repositories(id) ON DELETE SET NULL,
+    spun_from   TEXT REFERENCES looms(id) ON DELETE SET NULL,
 
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
-    pushed_at   TEXT,                    -- last push timestamp
+    synced_at   TEXT,                    -- last sync timestamp
 
     UNIQUE(owner_id, name)
 );
 
-CREATE INDEX idx_repos_owner ON repositories(owner_id);
-CREATE INDEX idx_repos_name ON repositories(name);
-CREATE INDEX idx_repos_visibility ON repositories(visibility);
-CREATE INDEX idx_repos_pushed ON repositories(pushed_at);
-CREATE INDEX idx_repos_stars ON repositories(star_count);
+CREATE INDEX idx_looms_owner ON looms(owner_id);
+CREATE INDEX idx_looms_name ON looms(name);
+CREATE INDEX idx_looms_visibility ON looms(visibility);
+CREATE INDEX idx_looms_synced ON looms(synced_at);
+CREATE INDEX idx_looms_pins ON looms(pin_count);
 ```
 
-Owner type (user or org) can be resolved via `JOIN owners ON owners.id = repositories.owner_id`. Cascading deletes now work through the database: deleting an owner cascades to the user/org row and to all their repositories.
+Owner type (user or org) can be resolved via `JOIN owners ON owners.id = looms.owner_id`. Cascading deletes now work through the database: deleting an owner cascades to the user/org row and to all their looms.
 
-### Repository Collaborators
+### Loom Collaborators
 
 ```sql
-CREATE TABLE repo_collaborators (
-    repo_id     TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+CREATE TABLE loom_collaborators (
+    loom_id     TEXT NOT NULL REFERENCES looms(id) ON DELETE CASCADE,
     user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     permission  TEXT NOT NULL DEFAULT 'read', -- read, write, admin
     created_at  TEXT NOT NULL,
-    PRIMARY KEY (repo_id, user_id)
+    PRIMARY KEY (loom_id, user_id)
 );
 
-CREATE INDEX idx_collabs_user ON repo_collaborators(user_id);
+CREATE INDEX idx_collabs_user ON loom_collaborators(user_id);
 ```
 
-### Stars
+### Pins
 
 ```sql
-CREATE TABLE stars (
+CREATE TABLE pins (
     user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    repo_id     TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    loom_id     TEXT NOT NULL REFERENCES looms(id) ON DELETE CASCADE,
     created_at  TEXT NOT NULL,
-    PRIMARY KEY (user_id, repo_id)
+    PRIMARY KEY (user_id, loom_id)
 );
 
-CREATE INDEX idx_stars_repo ON stars(repo_id);
+CREATE INDEX idx_pins_loom ON pins(loom_id);
 ```
 
-### Merge Requests
+### Weave Requests
 
 ```sql
-CREATE TABLE merge_requests (
+CREATE TABLE weave_requests (
     id          TEXT PRIMARY KEY,       -- ULID
-    repo_id     TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    number      INTEGER NOT NULL,       -- sequential per-repo number
+    loom_id     TEXT NOT NULL REFERENCES looms(id) ON DELETE CASCADE,
+    number      INTEGER NOT NULL,       -- sequential per-loom number
     author_id   TEXT NOT NULL REFERENCES users(id),
 
     title       TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
 
-    source_stream TEXT NOT NULL,         -- stream name being merged
-    target_stream TEXT NOT NULL,         -- stream name to merge into
+    source_stream TEXT NOT NULL,         -- stream name being woven
+    target_stream TEXT NOT NULL,         -- stream name to weave into
 
     -- Sequence tracking for diff computation
     source_head_seq INTEGER NOT NULL,    -- head seq of source at creation/update
     target_head_seq INTEGER NOT NULL,    -- head seq of target at creation/update
     merge_base_seq  INTEGER NOT NULL,    -- common ancestor seq
 
-    status      TEXT NOT NULL DEFAULT 'open', -- open, merged, closed
-    merged_by   TEXT REFERENCES users(id),
-    merged_at   TEXT,
+    status      TEXT NOT NULL DEFAULT 'open', -- open, woven, closed
+    woven_by    TEXT REFERENCES users(id),
+    woven_at    TEXT,
     closed_at   TEXT,
 
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
 
-    UNIQUE(repo_id, number)
+    UNIQUE(loom_id, number)
 );
 
-CREATE INDEX idx_mr_repo ON merge_requests(repo_id, status);
-CREATE INDEX idx_mr_author ON merge_requests(author_id);
-CREATE INDEX idx_mr_number ON merge_requests(repo_id, number);
+CREATE INDEX idx_wr_loom ON weave_requests(loom_id, status);
+CREATE INDEX idx_wr_author ON weave_requests(author_id);
+CREATE INDEX idx_wr_number ON weave_requests(loom_id, number);
 ```
 
-### Merge Request Comments
+### Weave Request Comments
 
 ```sql
-CREATE TABLE mr_comments (
+CREATE TABLE wr_comments (
     id          TEXT PRIMARY KEY,       -- ULID
-    mr_id       TEXT NOT NULL REFERENCES merge_requests(id) ON DELETE CASCADE,
+    wr_id       TEXT NOT NULL REFERENCES weave_requests(id) ON DELETE CASCADE,
     author_id   TEXT NOT NULL REFERENCES users(id),
     body        TEXT NOT NULL,
 
@@ -231,14 +231,14 @@ CREATE TABLE mr_comments (
 
     -- System events
     is_system   BOOLEAN NOT NULL DEFAULT FALSE,
-    event_type  TEXT,                    -- status_change, review, merge, etc.
+    event_type  TEXT,                    -- status_change, review, weave, etc.
 
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 );
 
-CREATE INDEX idx_mr_comments_mr ON mr_comments(mr_id);
-CREATE INDEX idx_mr_comments_author ON mr_comments(author_id);
+CREATE INDEX idx_wr_comments_wr ON wr_comments(wr_id);
+CREATE INDEX idx_wr_comments_author ON wr_comments(author_id);
 ```
 
 ### Reviews
@@ -246,14 +246,14 @@ CREATE INDEX idx_mr_comments_author ON mr_comments(author_id);
 ```sql
 CREATE TABLE reviews (
     id          TEXT PRIMARY KEY,       -- ULID
-    mr_id       TEXT NOT NULL REFERENCES merge_requests(id) ON DELETE CASCADE,
+    wr_id       TEXT NOT NULL REFERENCES weave_requests(id) ON DELETE CASCADE,
     reviewer_id TEXT NOT NULL REFERENCES users(id),
     status      TEXT NOT NULL,           -- approved, changes_requested, commented
     body        TEXT NOT NULL DEFAULT '',
     created_at  TEXT NOT NULL
 );
 
-CREATE INDEX idx_reviews_mr ON reviews(mr_id);
+CREATE INDEX idx_reviews_wr ON reviews(wr_id);
 ```
 
 ### Labels
@@ -261,17 +261,17 @@ CREATE INDEX idx_reviews_mr ON reviews(mr_id);
 ```sql
 CREATE TABLE labels (
     id          TEXT PRIMARY KEY,       -- ULID
-    repo_id     TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    loom_id     TEXT NOT NULL REFERENCES looms(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
     color       TEXT NOT NULL DEFAULT '#888888', -- hex color
     description TEXT NOT NULL DEFAULT '',
-    UNIQUE(repo_id, name)
+    UNIQUE(loom_id, name)
 );
 
-CREATE TABLE mr_labels (
-    mr_id       TEXT NOT NULL REFERENCES merge_requests(id) ON DELETE CASCADE,
+CREATE TABLE wr_labels (
+    wr_id       TEXT NOT NULL REFERENCES weave_requests(id) ON DELETE CASCADE,
     label_id    TEXT NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
-    PRIMARY KEY (mr_id, label_id)
+    PRIMARY KEY (wr_id, label_id)
 );
 ```
 
@@ -280,16 +280,16 @@ CREATE TABLE mr_labels (
 ```sql
 CREATE TABLE webhooks (
     id          TEXT PRIMARY KEY,       -- ULID
-    repo_id     TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    loom_id     TEXT NOT NULL REFERENCES looms(id) ON DELETE CASCADE,
     url         TEXT NOT NULL,
     secret      TEXT NOT NULL DEFAULT '', -- HMAC signing secret
-    events      TEXT NOT NULL DEFAULT 'push', -- comma-separated: push,mr,checkpoint,review
+    events      TEXT NOT NULL DEFAULT 'send', -- comma-separated: send,wr,checkpoint,review
     active      BOOLEAN NOT NULL DEFAULT TRUE,
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 );
 
-CREATE INDEX idx_webhooks_repo ON webhooks(repo_id);
+CREATE INDEX idx_webhooks_loom ON webhooks(loom_id);
 ```
 
 ### Webhook Deliveries
@@ -315,14 +315,14 @@ CREATE INDEX idx_deliveries_webhook ON webhook_deliveries(webhook_id);
 CREATE TABLE activities (
     id          TEXT PRIMARY KEY,       -- ULID
     actor_id    TEXT NOT NULL REFERENCES users(id),
-    repo_id     TEXT REFERENCES repositories(id) ON DELETE CASCADE,
-    type        TEXT NOT NULL,           -- push, create_repo, create_mr, merge, star, fork, comment
+    loom_id     TEXT REFERENCES looms(id) ON DELETE CASCADE,
+    type        TEXT NOT NULL,           -- send, create_loom, create_wr, weave, pin, spin, comment
     payload     TEXT NOT NULL DEFAULT '{}', -- JSON with event-specific data
     created_at  TEXT NOT NULL
 );
 
 CREATE INDEX idx_activities_actor ON activities(actor_id, created_at);
-CREATE INDEX idx_activities_repo ON activities(repo_id, created_at);
+CREATE INDEX idx_activities_loom ON activities(loom_id, created_at);
 CREATE INDEX idx_activities_type ON activities(type, created_at);
 ```
 
@@ -338,10 +338,10 @@ CREATE INDEX idx_activities_type ON activities(type, created_at);
 │   │   └── abcdef0123456789...
 │   └── cd/
 │       └── cdef0123456789...
-├── repos/                          # Per-repo Loom databases
+├── looms/                          # Per-loom Loom databases
 │   ├── flakerimi/
 │   │   ├── my-app/
-│   │   │   └── loom.db            # Repo's Loom database
+│   │   │   └── loom.db            # Loom's database
 │   │   └── another-project/
 │   │       └── loom.db
 │   └── acme-org/
@@ -352,23 +352,23 @@ CREATE INDEX idx_activities_type ON activities(type, created_at);
 
 ### Object Store Sharing
 
-All repositories share a single content-addressed object store. Since objects are identified by SHA-256 hash, identical content across repos is stored only once. This provides:
+All looms share a single content-addressed object store. Since objects are identified by SHA-256 hash, identical content across looms is stored only once. This provides:
 
-- **Deduplication** — Forked repos share most objects
+- **Deduplication** — Spun looms share most objects
 - **Efficiency** — Common libraries/dependencies stored once
 - **Simplicity** — Single directory to back up
 
-### Per-Repo Database
+### Per-Loom Database
 
-Each repository has its own SQLite database containing tables based on the Loom schema:
+Each loom has its own SQLite database containing tables based on the Loom schema:
 - `operations` — append-only operation log
 - `checkpoints` — named points in time
 - `streams` — timeline management
 - `entities` — current entity states
 - `objects` — object hash index (hash, size, compressed flag — but **not** ref_count or blob storage)
-- `metadata` — repo-level key-value config
+- `metadata` — loom-level key-value config
 
-The schema is based on a local `.loom/` database with one key difference: **object blob storage is delegated to the shared object store** rather than stored per-repo. The `objects` table in each repo database serves as an index of which objects the repo references, but the actual bytes live in the shared store. The sync handler translates between Loom's native protocol (which assumes per-repo object storage) and LoomHub's shared store transparently.
+The schema is based on a local `.loom/` database with one key difference: **object blob storage is delegated to the shared object store** rather than stored per-loom. The `objects` table in each loom database serves as an index of which objects the loom references, but the actual bytes live in the shared store. The sync handler translates between Loom's native protocol (which assumes per-loom object storage) and LoomHub's shared store transparently.
 
 ---
 
@@ -378,26 +378,26 @@ The schema is based on a local `.loom/` database with one key difference: **obje
 Owner (shared namespace) ─── type=user ──── User
         │                └── type=org  ──── Organization
         │
-        └── owns ──── Repository
+        └── owns ──── Loom
                           │
 User ─────┬── member of ── Organization
           │
-          ├── stars ────── Repository
+          ├── pins ────── Loom
           │
-          ├── authors ──── MergeRequest ──── has ── Comments
+          ├── authors ──── WeaveRequest ──── has ── Comments
           │                     │                     Reviews
           │                     │                     Labels
           └── creates ──── AccessToken
                             SSHKey
                             Activity
 
-Repository ──── has ──── Webhooks ──── has ──── Deliveries
+Loom ──── has ──── Webhooks ──── has ──── Deliveries
 ```
 
 ## Key Invariants
 
-1. **Owner namespace uniqueness** — Enforced by the `owners` table: usernames and org names share a single `UNIQUE(name)` constraint. No user and org can have the same name. This makes `/{owner}/{repo}` routing unambiguous.
-2. **Repo uniqueness** — Repository names are unique within an owner (`UNIQUE(owner_id, name)`)
-3. **MR numbering** — Merge request numbers are sequential per repository
-4. **Cascading deletes** — Deleting an owner cascades through `owners → users/organizations → repositories → (MRs, collaborators, stars, webhooks, etc.)`. All enforced by foreign keys with `ON DELETE CASCADE`.
+1. **Owner namespace uniqueness** — Enforced by the `owners` table: usernames and org names share a single `UNIQUE(name)` constraint. No user and org can have the same name. This makes `/{owner}/{loom}` routing unambiguous.
+2. **Loom uniqueness** — Loom names are unique within an owner (`UNIQUE(owner_id, name)`)
+3. **WR numbering** — Weave request numbers are sequential per loom
+4. **Cascading deletes** — Deleting an owner cascades through `owners → users/organizations → looms → (WRs, collaborators, pins, webhooks, etc.)`. All enforced by foreign keys with `ON DELETE CASCADE`.
 5. **Object immutability** — Objects in the shared store are never modified, only added or garbage-collected

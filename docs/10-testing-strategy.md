@@ -12,7 +12,7 @@ Each package has `_test.go` files alongside the source. Focus:
 |---------|-------------|
 | `internal/auth` | JWT generation/validation, bcrypt, permission checks |
 | `internal/store` | CRUD operations against in-memory SQLite |
-| `internal/sync` | Negotiate logic, push/pull correctness |
+| `internal/sync` | Negotiate logic, send/receive correctness |
 | `internal/render` | Syntax highlighting, markdown output |
 | `internal/webhook` | HMAC signing, payload formatting |
 
@@ -39,20 +39,20 @@ func TestUserCreate(t *testing.T) {
 In `test/integration/`, test full HTTP request/response cycles:
 
 ```go
-func TestPushPull(t *testing.T) {
+func TestSendReceive(t *testing.T) {
     srv := testutil.NewTestServer(t)
 
-    // Create user + repo
+    // Create user + loom
     token := srv.CreateUser("testuser", "test@example.com")
-    srv.CreateRepo(token, "my-app")
+    srv.CreateLoom(token, "my-app")
 
-    // Push operations
-    resp := srv.Push(token, "testuser/my-app", pushPayload)
+    // Send operations
+    resp := srv.Send(token, "testuser/my-app", sendPayload)
     assert.Equal(t, 200, resp.StatusCode)
 
-    // Pull and verify
-    pullResp := srv.Pull(token, "testuser/my-app", 0)
-    assert.Len(t, pullResp.Operations, len(pushPayload.Operations))
+    // Receive and verify
+    receiveResp := srv.Receive(token, "testuser/my-app", 0)
+    assert.Len(t, receiveResp.Operations, len(sendPayload.Operations))
 }
 ```
 
@@ -61,23 +61,23 @@ func TestPushPull(t *testing.T) {
 Test the actual `loom` CLI against a running LoomHub server:
 
 ```go
-func TestCLIPushPull(t *testing.T) {
+func TestCLISendReceive(t *testing.T) {
     srv := testutil.StartServer(t)
 
-    // Init local loom project and push
+    // Init local loom project and send
     dir := t.TempDir()
     testutil.RunLoom(t, dir, "init")
-    testutil.RunLoom(t, dir, "remote", "add", "origin", srv.URL+"/testuser/my-app")
+    testutil.RunLoom(t, dir, "hub", "add", "origin", srv.URL+"/testuser/my-app")
 
     os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0644)
     testutil.RunLoom(t, dir, "checkpoint", "initial")
-    testutil.RunLoom(t, dir, "push", "origin")
+    testutil.RunLoom(t, dir, "send", "origin")
 
-    // Pull into a fresh project and verify
+    // Receive into a fresh project and verify
     dir2 := t.TempDir()
     testutil.RunLoom(t, dir2, "init")
-    testutil.RunLoom(t, dir2, "remote", "add", "origin", srv.URL+"/testuser/my-app")
-    testutil.RunLoom(t, dir2, "pull", "origin")
+    testutil.RunLoom(t, dir2, "hub", "add", "origin", srv.URL+"/testuser/my-app")
+    testutil.RunLoom(t, dir2, "receive", "origin")
 
     // Verify content matches
     content, _ := os.ReadFile(filepath.Join(dir2, "main.go"))
@@ -98,8 +98,8 @@ func NewTestDB(t *testing.T) *sql.DB
 // NewTestServer creates a full test server with in-memory storage
 func NewTestServer(t *testing.T) *TestServer
 
-// NewTestRepoDB creates a fresh Loom database for a repo
-func NewTestRepoDB(t *testing.T) *sql.DB
+// NewTestLoomDB creates a fresh Loom database for a loom
+func NewTestLoomDB(t *testing.T) *sql.DB
 ```
 
 ---

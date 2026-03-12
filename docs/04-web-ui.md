@@ -31,27 +31,27 @@ frontend/
 │   │   └── index.ts                # Route definitions
 │   ├── stores/
 │   │   ├── auth.ts                 # Auth state (user, token)
-│   │   ├── repo.ts                 # Active repo state
+│   │   ├── loom.ts                 # Active loom state
 │   │   └── notification.ts         # Toast notifications
 │   ├── api/
 │   │   ├── client.ts               # ofetch instance with auth interceptor
 │   │   ├── users.ts                # User API calls
-│   │   ├── repos.ts                # Repo API calls
+│   │   ├── looms.ts                # Loom API calls
 │   │   ├── sync.ts                 # Content API (log, entities, diff)
-│   │   ├── mergeRequests.ts        # MR API calls
+│   │   ├── weaveRequests.ts        # WR API calls
 │   │   └── search.ts               # Search API calls
 │   ├── layouts/
 │   │   ├── DefaultLayout.vue       # Nav + footer wrapper
 │   │   └── AuthLayout.vue          # Minimal layout for login/register
 │   ├── views/
 │   │   ├── Home.vue                # Landing / dashboard
-│   │   ├── Explore.vue             # Browse public repos
+│   │   ├── Explore.vue             # Browse public looms
 │   │   ├── Login.vue
 │   │   ├── Register.vue
 │   │   ├── Profile.vue             # User/org profile
-│   │   ├── repo/
-│   │   │   ├── RepoLayout.vue      # Repo header + tabs wrapper
-│   │   │   ├── RepoOverview.vue    # README + stats
+│   │   ├── loom/
+│   │   │   ├── LoomLayout.vue      # Loom header + tabs wrapper
+│   │   │   ├── LoomOverview.vue    # README + stats
 │   │   │   ├── EntityTree.vue      # File/entity browser
 │   │   │   ├── EntityView.vue      # Single entity content
 │   │   │   ├── CheckpointLog.vue   # Checkpoint history
@@ -59,11 +59,11 @@ frontend/
 │   │   │   ├── DiffView.vue        # Multi-space diff
 │   │   │   ├── Streams.vue         # Stream list
 │   │   │   ├── OperationLog.vue    # Raw operation history
-│   │   │   └── Settings.vue        # Repo settings
-│   │   ├── mr/
-│   │   │   ├── MRList.vue          # Merge request list
-│   │   │   ├── MRNew.vue           # Create MR form
-│   │   │   └── MRDetail.vue        # MR discussion + diff + reviews
+│   │   │   └── Settings.vue        # Loom settings
+│   │   ├── wr/
+│   │   │   ├── WRList.vue          # Weave request list
+│   │   │   ├── WRNew.vue           # Create WR form
+│   │   │   └── WRDetail.vue        # WR discussion + diff + reviews
 │   │   ├── settings/
 │   │   │   ├── ProfileSettings.vue
 │   │   │   ├── TokenSettings.vue
@@ -71,26 +71,26 @@ frontend/
 │   │   └── admin/
 │   │       ├── AdminDashboard.vue
 │   │       ├── AdminUsers.vue
-│   │       └── AdminRepos.vue
+│   │       └── AdminLooms.vue
 │   ├── components/
 │   │   ├── nav/
 │   │   │   ├── AppNav.vue          # Top navigation bar
-│   │   │   ├── RepoNav.vue         # Repo sub-navigation tabs
+│   │   │   ├── LoomNav.vue         # Loom sub-navigation tabs
 │   │   │   └── UserMenu.vue        # Avatar + dropdown
-│   │   ├── repo/
+│   │   ├── loom/
 │   │   │   ├── EntityTreeItem.vue  # Recursive tree node
 │   │   │   ├── SpaceTabs.vue       # code | docs | design | data | config | notes
 │   │   │   ├── StreamSelector.vue  # Stream dropdown
 │   │   │   ├── CheckpointCard.vue  # Checkpoint in log list
-│   │   │   └── RepoStats.vue       # Star/fork/checkpoint counts
+│   │   │   └── LoomStats.vue       # Pin/spin/checkpoint counts
 │   │   ├── diff/
 │   │   │   ├── DiffFile.vue        # Single entity diff (collapsible)
 │   │   │   ├── DiffHunk.vue        # Hunk with line numbers
 │   │   │   ├── DiffLine.vue        # Add/delete/context line
 │   │   │   ├── DiffStats.vue       # +/- summary bar
 │   │   │   └── InlineComment.vue   # Comment anchored to diff line
-│   │   ├── mr/
-│   │   │   ├── MRStatus.vue        # Open/merged/closed badge
+│   │   ├── wr/
+│   │   │   ├── WRStatus.vue        # Open/woven/closed badge
 │   │   │   ├── ReviewBadge.vue     # Approved/changes requested
 │   │   │   ├── CommentThread.vue   # Comment + replies
 │   │   │   └── CommentEditor.vue   # Markdown editor with preview
@@ -130,19 +130,19 @@ frontend/
 | Route | View | Description |
 |-------|------|-------------|
 | `/` | Home | Landing (guest) or dashboard (logged in) |
-| `/explore` | Explore | Browse public repos |
+| `/explore` | Explore | Browse public looms |
 | `/login` | Login | Login form |
 | `/register` | Register | Registration form |
-| `/:owner` | Profile | User or org profile + repo list |
-| `/:owner/:repo` | RepoOverview | Repo overview (README, stats) |
+| `/:owner` | Profile | User or org profile + loom list |
+| `/:owner/:loom` | LoomOverview | Loom overview (README, stats) |
 
-### Repository Routes
+### Loom Routes
 
-All under `/:owner/:repo/`:
+All under `/:owner/:loom/`:
 
 | Route | View | Description |
 |-------|------|-------------|
-| `/` | RepoOverview | Default stream entity tree + README |
+| `/` | LoomOverview | Default stream entity tree + README |
 | `/tree/:stream` | EntityTree | Browse entities at stream head |
 | `/tree/:stream/:space/*path` | EntityView | View single entity |
 | `/log` | CheckpointLog | Checkpoint history |
@@ -150,10 +150,10 @@ All under `/:owner/:repo/`:
 | `/operations` | OperationLog | Raw operation log |
 | `/diff/:from...:to` | DiffView | Multi-space diff between refs |
 | `/streams` | Streams | List all streams |
-| `/merge-requests` | MRList | List MRs (open/closed/merged) |
-| `/merge-requests/new` | MRNew | Create MR form |
-| `/merge-requests/:number` | MRDetail | MR detail page |
-| `/settings` | Settings | Repo settings (admin only) |
+| `/weave-requests` | WRList | List WRs (open/closed/woven) |
+| `/weave-requests/new` | WRNew | Create WR form |
+| `/weave-requests/:number` | WRDetail | WR detail page |
+| `/settings` | Settings | Loom settings (admin only) |
 
 ### User Settings Routes
 
@@ -169,7 +169,7 @@ All under `/:owner/:repo/`:
 |-------|------|-------------|
 | `/admin` | AdminDashboard | System stats |
 | `/admin/users` | AdminUsers | User management |
-| `/admin/repos` | AdminRepos | Repo management |
+| `/admin/looms` | AdminLooms | Loom management |
 
 ---
 
@@ -230,17 +230,17 @@ Key features:
 - Unified/side-by-side toggle (reactive, no re-fetch)
 - Collapsible file sections
 - Expand context around hunks (fetch more lines on click)
-- Inline comments on diff lines (for MR review)
+- Inline comments on diff lines (for WR review)
 - Space-grouped diffs with per-space stats
 
-### Merge Request Detail
+### Weave Request Detail
 
 ```
 ┌─────────────────────────────────────────────┐
-│  MR #42: Add user authentication             │
+│  WR #42: Add user authentication             │
 │  feature/auth → main                         │
 │  [Open] Author: flakerimi   ✓ Approved       │
-│  [Merge ▾] [Close]                           │
+│  [Weave ▾] [Close]                           │
 ├─────────────────────────────────────────────┤
 │  [Conversation] [Diff (8)] [Reviews (1)]     │
 ├─────────────────────────────────────────────┤
@@ -265,23 +265,23 @@ Features:
 - Real-time comment updates (polling or SSE)
 - Markdown preview in comment editor
 - Review submission with approve/request changes
-- Merge button with conflict detection
+- Weave button with conflict detection
 
 ### Dashboard (Logged In)
 
 ```
 ┌─────────────────────────────────────────────┐
-│  LoomHub                    [+ New Repo] 🔔  │
+│  LoomHub                    [+ New Loom] 🔔  │
 ├──────────────┬──────────────────────────────┤
-│  Your Repos  │  Activity Feed               │
+│  Your Looms  │  Activity Feed               │
 │              │                              │
-│  my-app      │  flakerimi pushed to main    │
-│  ★ 3  ⑂ 1   │  my-app · 3h ago · 5 files   │
+│  my-app      │  flakerimi sent to main      │
+│  📌 3  🔀 1  │  my-app · 3h ago · 5 files   │
 │              │                              │
-│  website     │  jane opened MR #42          │
-│  ★ 0  ⑂ 0   │  my-app · 5h ago              │
+│  website     │  jane opened WR #42          │
+│  📌 0  🔀 0  │  my-app · 5h ago              │
 │              │                              │
-│  [View all]  │  flakerimi created repo      │
+│  [View all]  │  flakerimi created loom      │
 │              │  website · 1d ago             │
 └──────────────┴──────────────────────────────┘
 ```
@@ -326,19 +326,19 @@ export const useAuthStore = defineStore('auth', () => {
 })
 ```
 
-### Repo Store
+### Loom Store
 
 ```ts
-// stores/repo.ts
-export const useRepoStore = defineStore('repo', () => {
-  const repo = ref<Repository | null>(null)
+// stores/loom.ts
+export const useLoomStore = defineStore('loom', () => {
+  const loom = ref<Loom | null>(null)
   const activeStream = ref('main')
   const streams = ref<Stream[]>([])
 
-  async function fetchRepo(owner: string, name: string) { ... }
+  async function fetchLoom(owner: string, name: string) { ... }
   async function fetchStreams() { ... }
 
-  return { repo, activeStream, streams, fetchRepo, fetchStreams }
+  return { loom, activeStream, streams, fetchLoom, fetchStreams }
 })
 ```
 

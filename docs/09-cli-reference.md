@@ -60,7 +60,7 @@ loomhub doctor [flags]
 
 Checks:
 - Hub database schema version and integrity
-- Per-repo database integrity
+- Per-loom database integrity
 - Object store consistency (files vs. index)
 - Orphaned objects
 - Disk space
@@ -92,7 +92,7 @@ LoomHub v0.1.0
 Data directory: /var/lib/loomhub
 Hub database: 2.1 MB
 Object store: 1.3 GB (4,523 objects)
-Repositories: 42
+Looms: 42
 Users: 15
 ```
 
@@ -103,25 +103,25 @@ Users: 15
 Users interact with LoomHub through Loom's existing CLI commands (see [Loom CLI reference](../../loom/docs/11-cli-reference.md) and [sync protocol](../../loom/docs/06-systems/sync.md)):
 
 ```bash
-# Add LoomHub as a remote
-loom remote add origin https://hub.example.com/flakerimi/my-app
+# Add LoomHub as a hub
+loom hub add origin https://loomhub.dev/flakerimi/my-app
 
-# Authenticate — uses Loom's existing remote auth command
+# Authenticate — uses Loom's existing hub auth command
 # Prompts for token or opens browser for OAuth
-loom remote auth origin
+loom hub auth origin
 
-# Push to LoomHub
-loom push origin
+# Send to LoomHub
+loom send origin
 
-# Pull from LoomHub
-loom pull origin
+# Receive from LoomHub
+loom receive origin
 
 # Show sync status
-loom remote status
+loom hub status
 ```
 
-> **Note:** LoomHub does not require any new `loom` CLI commands. All interaction uses `loom remote add`, `loom remote auth`, `loom push`, and `loom pull` which are part of Loom's current command surface. The Loom client uses the remote URL as the base path and appends `/api/v1/negotiate`, `/api/v1/push`, `/api/v1/pull` — this works naturally with LoomHub's `/{owner}/{repo}/api/v1/...` routing. Future commands like `loom clone` would need to be added to Loom itself first.
+> **Note:** LoomHub does not require any new `loom` CLI commands. All interaction uses `loom hub add`, `loom hub auth`, `loom send`, and `loom receive` which are part of Loom's current command surface. The Loom client uses the hub URL as the base path and appends `/api/v1/negotiate`, `/api/v1/push`, `/api/v1/pull` — this works naturally with LoomHub's `/{owner}/{loom}/api/v1/...` routing. Future commands like `loom replicate` would need to be added to Loom itself first.
 
 ### Access Token Setup
 
-Users create an access token in LoomHub's web UI (Settings > Access Tokens), then provide it when running `loom remote auth origin`. Loom stores credentials as documented in its own config format.
+Users create an access token in LoomHub's web UI (Settings > Access Tokens), then provide it when running `loom hub auth origin`. Loom stores credentials as documented in its own config format.

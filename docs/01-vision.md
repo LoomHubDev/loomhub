@@ -2,15 +2,15 @@
 
 ## What Is LoomHub?
 
-LoomHub is the remote hosting and collaboration platform for [Loom](https://github.com/flakerimi/loom) repositories. It is to Loom what GitHub is to Git — a web-based service where teams push, pull, browse, and collaborate on Loom-versioned projects.
+LoomHub is the remote hosting and collaboration platform for [Loom](https://github.com/flakerimi/loom) looms. It is to Loom what GitHub is to Git — a web-based service where teams send, receive, browse, and collaborate on Loom-versioned projects.
 
 ## Why LoomHub?
 
 Loom tracks every operation across multiple content spaces (code, docs, design, data, config, notes) in a single, unified timeline. LoomHub makes that timeline collaborative:
 
-- **Push/Pull** — Teams sync Loom projects through a central server
+- **Send/Receive** — Teams sync Loom projects through a central server
 - **Browse** — View checkpoint history, diffs, and entity trees through a web UI
-- **Collaborate** — Merge requests, reviews, and discussions on streams
+- **Collaborate** — Weave requests, reviews, and discussions on streams
 - **Discover** — Search across projects, checkpoints, and entities
 - **Automate** — Webhooks and CI/CD integration on checkpoint events
 
@@ -18,7 +18,7 @@ Loom tracks every operation across multiple content spaces (code, docs, design, 
 
 ### 1. Loom-Native
 
-LoomHub implements Loom's sync protocol (negotiate/push/pull) exactly as defined in Loom's spec. The `loom` CLI interoperates with LoomHub without modifications. Server-side storage uses the same Loom database schema per repo, with object blob storage adapted to a shared cross-repo store (see [Repository Hosting](06-repository-hosting.md)).
+LoomHub implements Loom's sync protocol (negotiate/send/receive) exactly as defined in Loom's spec. The `loom` CLI interoperates with LoomHub without modifications. Server-side storage uses the same Loom database schema per loom, with object blob storage adapted to a shared cross-loom store (see [Loom Hosting](06-loom-hosting.md)).
 
 ### 2. Multi-Space Aware
 
@@ -37,7 +37,7 @@ Like Loom itself, LoomHub's storage is append-only. Operations are never deleted
 - Go backend, single binary deployment (Vue SPA embedded via `embed.FS`)
 - SQLite per project (no shared database cluster needed for small/medium scale)
 - Vue 3 SPA for a reactive UI with real-time updates
-- Fast push/pull over HTTP with delta sync
+- Fast send/receive over HTTP with delta sync
 
 ### 6. Self-Hostable First
 
@@ -51,8 +51,8 @@ LoomHub is designed to run on a single machine or a small cluster. No Kubernetes
 │                                                       │
 │  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
 │  │ Sync API │  │ REST API │  │   Static Files    │  │
-│  │ (push/   │  │ (users,  │  │  (Vue SPA dist)   │  │
-│  │  pull,   │  │  repos,  │  │  via embed.FS     │  │
+│  │ (send/   │  │ (users,  │  │  (Vue SPA dist)   │  │
+│  │  recv,   │  │  looms,  │  │  via embed.FS     │  │
 │  │  negot.) │  │  search) │  │                    │  │
 │  └────┬─────┘  └────┬─────┘  └────────┬──────────┘  │
 │       │              │                 │              │
@@ -65,7 +65,7 @@ LoomHub is designed to run on a single machine or a small cluster. No Kubernetes
 │  │              Storage Layer                      │  │
 │  │                                                 │  │
 │  │  ┌─────────┐  ┌───────────┐  ┌──────────────┐ │  │
-│  │  │ Hub DB  │  │ Per-Repo  │  │ Object Store │ │  │
+│  │  │ Hub DB  │  │ Per-Loom  │  │ Object Store │ │  │
 │  │  │(SQLite) │  │  Loom DBs │  │  (shared)    │ │  │
 │  │  │         │  │  (SQLite) │  │              │ │  │
 │  │  └─────────┘  └───────────┘  └──────────────┘ │  │
@@ -87,11 +87,11 @@ LoomHub is designed to run on a single machine or a small cluster. No Kubernetes
 
 | Layer | Responsibility |
 |-------|---------------|
-| **Sync API** | Implements Loom's negotiate/push/pull protocol at `/{owner}/{repo}/api/v1/...` |
-| **REST API** | CRUD for users, repos, merge requests, search, webhooks — consumed by the Vue SPA |
+| **Sync API** | Implements Loom's negotiate/send/receive protocol at `/{owner}/{loom}/api/v1/...` |
+| **REST API** | CRUD for users, looms, weave requests, search, webhooks — consumed by the Vue SPA |
 | **Vue SPA** | Client-side rendered UI with reactive components, compiled and embedded in the Go binary |
 | **Application** | Business logic — auth, permissions, notifications, webhook dispatch |
-| **Storage** | Hub-level SQLite (users, repos, permissions) + per-repo Loom databases + shared object store |
+| **Storage** | Hub-level SQLite (users, looms, permissions) + per-loom Loom databases + shared object store |
 
 ## Tech Stack
 
@@ -103,7 +103,7 @@ LoomHub is designed to run on a single machine or a small cluster. No Kubernetes
 | HTTP Router | chi | Lightweight, composable, idiomatic Go |
 | Database | SQLite (modernc.org) | Same as Loom; no external DB dependency; WAL mode |
 | Auth | bcrypt + JWT | Simple, proven |
-| Object Storage | Filesystem (content-addressed) | Shared across repos, deduplication via SHA-256 |
+| Object Storage | Filesystem (content-addressed) | Shared across looms, deduplication via SHA-256 |
 | SPA Embedding | `embed.FS` | Vue dist bundled into Go binary for single-binary deploy |
 
 ### Frontend (Vue)
@@ -130,7 +130,7 @@ loomhub serve --data /var/lib/loomhub --port 3000
 
 Everything runs in a single process:
 - HTTP server (sync + API + web)
-- SQLite databases (hub + per-repo)
+- SQLite databases (hub + per-loom)
 - Object store on local filesystem
 
 ### Scale-Out (Future)
@@ -138,7 +138,7 @@ Everything runs in a single process:
 For larger deployments:
 - Object store → S3-compatible backend
 - Hub database → PostgreSQL
-- Per-repo databases → Sharded across nodes
+- Per-loom databases → Sharded across nodes
 - HTTP → Behind reverse proxy with sticky sessions
 
 ## Comparison with GitHub
@@ -149,7 +149,7 @@ For larger deployments:
 | Content types | Code only | Code + docs + design + data + config + notes |
 | Change granularity | Commits (manual) | Operations (automatic) + Checkpoints (named) |
 | Branching | Branches | Streams |
-| Merge requests | Pull Requests | Merge Requests (stream → stream) |
+| Collaboration | Pull Requests | Weave Requests (stream → stream) |
 | Storage | Packfiles | SQLite + content-addressed objects |
 | Self-hosting | GitHub Enterprise ($$) | Built-in, free |
 | CI/CD | GitHub Actions | Webhooks + external runners |
