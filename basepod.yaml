@@ -1,6 +1,6 @@
 name: loomhub
-server: bp.common.al
+type: container
 port: 8080
+
 build:
-    dockerfile: Dockerfile
-    context: .
+  dockerfile: Dockerfile
