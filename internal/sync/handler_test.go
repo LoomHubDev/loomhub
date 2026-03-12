@@ -5,23 +5,23 @@ import (
 	"os"
 	"testing"
 
-	"github.com/LoomHubDev/loomhub/internal/database"
 	"github.com/LoomHubDev/loomhub/internal/models"
-	_ "modernc.org/sqlite"
 )
 
 func setupTestSync(t *testing.T) (*Handler, *models.Loom) {
 	t.Helper()
 	dir := t.TempDir()
 
-	// Hub database
+	// Hub database (sync handler uses raw *sql.DB for per-loom operations)
 	hubDB, err := sql.Open("sqlite", ":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.Migrate(hubDB); err != nil {
-		t.Fatal(err)
-	}
+	// Create hub tables manually for sync tests (sync handler uses raw SQL)
+	hubDB.Exec(`CREATE TABLE IF NOT EXISTS owners (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, type TEXT NOT NULL, created_at TEXT NOT NULL)`)
+	hubDB.Exec(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, display_name TEXT, bio TEXT, avatar_url TEXT, password_hash TEXT NOT NULL, is_admin BOOLEAN DEFAULT FALSE, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`)
+	hubDB.Exec(`CREATE TABLE IF NOT EXISTS looms (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, visibility TEXT DEFAULT 'public', default_stream TEXT DEFAULT 'main', disk_path TEXT, size_bytes INTEGER DEFAULT 0, checkpoint_count INTEGER DEFAULT 0, stream_count INTEGER DEFAULT 0, pin_count INTEGER DEFAULT 0, spin_count INTEGER DEFAULT 0, spun_from TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, synced_at TEXT)`)
+	hubDB.Exec(`CREATE TABLE IF NOT EXISTS object_refs (hash TEXT NOT NULL, loom_id TEXT NOT NULL, size INTEGER DEFAULT 0, PRIMARY KEY (hash, loom_id))`)
 	t.Cleanup(func() { hubDB.Close() })
 
 	// Create owner + user + loom in hub
@@ -231,4 +231,3 @@ func TestSendIdempotent(t *testing.T) {
 		t.Fatalf("second send failed: %s", resp.Error)
 	}
 }
-

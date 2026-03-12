@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/glebarez/go-sqlite" // registers "sqlite" driver for sql.Open
 )
 
 type LoomDBManager struct {

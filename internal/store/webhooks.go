@@ -1,28 +1,23 @@
 package store
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/LoomHubDev/loomhub/internal/models"
+	"gorm.io/gorm"
 )
 
 type WebhookStore struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewWebhookStore(db *sql.DB) *WebhookStore {
+func NewWebhookStore(db *gorm.DB) *WebhookStore {
 	return &WebhookStore{db: db}
 }
 
 func (s *WebhookStore) Create(wh *models.Webhook) error {
-	_, err := s.db.Exec(`
-		INSERT INTO webhooks (id, loom_id, url, secret, events, active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		wh.ID, wh.LoomID, wh.URL, wh.Secret, wh.Events, wh.Active, wh.CreatedAt, wh.UpdatedAt,
-	)
-	if err != nil {
+	if err := s.db.Create(wh).Error; err != nil {
 		return fmt.Errorf("create webhook: %w", err)
 	}
 	return nil
@@ -30,49 +25,30 @@ func (s *WebhookStore) Create(wh *models.Webhook) error {
 
 func (s *WebhookStore) GetByID(id string) (*models.Webhook, error) {
 	var wh models.Webhook
-	err := s.db.QueryRow(`
-		SELECT id, loom_id, url, secret, events, active, created_at, updated_at
-		FROM webhooks WHERE id = ?`, id,
-	).Scan(&wh.ID, &wh.LoomID, &wh.URL, &wh.Secret, &wh.Events, &wh.Active, &wh.CreatedAt, &wh.UpdatedAt)
-	if err != nil {
+	if err := s.db.First(&wh, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return &wh, nil
 }
 
 func (s *WebhookStore) ListByLoom(loomID string) ([]models.Webhook, error) {
-	rows, err := s.db.Query(`
-		SELECT id, loom_id, url, secret, events, active, created_at, updated_at
-		FROM webhooks WHERE loom_id = ? ORDER BY created_at ASC`, loomID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var webhooks []models.Webhook
-	for rows.Next() {
-		var wh models.Webhook
-		if err := rows.Scan(&wh.ID, &wh.LoomID, &wh.URL, &wh.Secret, &wh.Events, &wh.Active, &wh.CreatedAt, &wh.UpdatedAt); err != nil {
-			return nil, err
-		}
-		webhooks = append(webhooks, wh)
-	}
-	return webhooks, nil
+	err := s.db.Where("loom_id = ?", loomID).Order("created_at ASC").Find(&webhooks).Error
+	return webhooks, err
 }
 
 func (s *WebhookStore) Update(wh *models.Webhook) error {
-	_, err := s.db.Exec(`
-		UPDATE webhooks SET url = ?, secret = ?, events = ?, active = ?, updated_at = ?
-		WHERE id = ?`,
-		wh.URL, wh.Secret, wh.Events, wh.Active, wh.UpdatedAt, wh.ID,
-	)
-	return err
+	return s.db.Model(wh).Updates(map[string]any{
+		"url":        wh.URL,
+		"secret":     wh.Secret,
+		"events":     wh.Events,
+		"active":     wh.Active,
+		"updated_at": wh.UpdatedAt,
+	}).Error
 }
 
 func (s *WebhookStore) Delete(id string) error {
-	_, err := s.db.Exec("DELETE FROM webhooks WHERE id = ?", id)
-	return err
+	return s.db.Delete(&models.Webhook{}, "id = ?", id).Error
 }
 
 func (s *WebhookStore) ListByLoomAndEvent(loomID, event string) ([]models.Webhook, error) {
@@ -97,32 +73,11 @@ func (s *WebhookStore) ListByLoomAndEvent(loomID, event string) ([]models.Webhoo
 }
 
 func (s *WebhookStore) LogDelivery(d *models.WebhookDelivery) error {
-	_, err := s.db.Exec(`
-		INSERT INTO webhook_deliveries (id, webhook_id, event, payload, status_code, response, duration_ms, delivered_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		d.ID, d.WebhookID, d.Event, d.Payload, d.StatusCode, d.Response, d.DurationMS, d.DeliveredAt,
-	)
-	return err
+	return s.db.Create(d).Error
 }
 
 func (s *WebhookStore) ListDeliveries(webhookID string, limit int) ([]models.WebhookDelivery, error) {
-	rows, err := s.db.Query(`
-		SELECT id, webhook_id, event, payload, status_code, response, duration_ms, delivered_at
-		FROM webhook_deliveries WHERE webhook_id = ?
-		ORDER BY delivered_at DESC LIMIT ?`, webhookID, limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var deliveries []models.WebhookDelivery
-	for rows.Next() {
-		var d models.WebhookDelivery
-		if err := rows.Scan(&d.ID, &d.WebhookID, &d.Event, &d.Payload, &d.StatusCode, &d.Response, &d.DurationMS, &d.DeliveredAt); err != nil {
-			return nil, err
-		}
-		deliveries = append(deliveries, d)
-	}
-	return deliveries, nil
+	err := s.db.Where("webhook_id = ?", webhookID).Order("delivered_at DESC").Limit(limit).Find(&deliveries).Error
+	return deliveries, err
 }

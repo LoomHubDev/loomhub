@@ -1,27 +1,24 @@
 package store
 
 import (
-	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/LoomHubDev/loomhub/internal/models"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type OrgStore struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewOrgStore(db *sql.DB) *OrgStore {
+func NewOrgStore(db *gorm.DB) *OrgStore {
 	return &OrgStore{db: db}
 }
 
 func (s *OrgStore) Create(org *models.Organization) error {
-	_, err := s.db.Exec(`
-		INSERT INTO organizations (id, name, display_name, description, avatar_url, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		org.ID, org.Name, org.DisplayName, org.Description, org.AvatarURL, org.CreatedAt, org.UpdatedAt,
-	)
-	if err != nil {
+	if err := s.db.Create(org).Error; err != nil {
 		return fmt.Errorf("create org: %w", err)
 	}
 	return nil
@@ -29,97 +26,64 @@ func (s *OrgStore) Create(org *models.Organization) error {
 
 func (s *OrgStore) GetByName(name string) (*models.Organization, error) {
 	var org models.Organization
-	err := s.db.QueryRow(`
-		SELECT id, name, display_name, description, avatar_url, created_at, updated_at
-		FROM organizations WHERE name = ?`, name,
-	).Scan(&org.ID, &org.Name, &org.DisplayName, &org.Description, &org.AvatarURL, &org.CreatedAt, &org.UpdatedAt)
-	if err != nil {
+	if err := s.db.Where("name = ?", name).First(&org).Error; err != nil {
 		return nil, err
 	}
 	return &org, nil
 }
 
 func (s *OrgStore) Update(org *models.Organization) error {
-	_, err := s.db.Exec(`
-		UPDATE organizations SET display_name = ?, description = ?, avatar_url = ?, updated_at = ?
-		WHERE id = ?`,
-		org.DisplayName, org.Description, org.AvatarURL, org.UpdatedAt, org.ID,
-	)
-	return err
+	return s.db.Model(org).Updates(map[string]any{
+		"display_name": org.DisplayName,
+		"description":  org.Description,
+		"avatar_url":   org.AvatarURL,
+		"updated_at":   org.UpdatedAt,
+	}).Error
 }
 
 func (s *OrgStore) Delete(id string) error {
-	_, err := s.db.Exec("DELETE FROM organizations WHERE id = ?", id)
-	return err
+	return s.db.Delete(&models.Organization{}, "id = ?", id).Error
 }
 
 func (s *OrgStore) AddMember(orgID, userID, role string) error {
-	_, err := s.db.Exec(`
-		INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (?, ?, ?, datetime('now'))
-		ON CONFLICT(org_id, user_id) DO UPDATE SET role = excluded.role`,
-		orgID, userID, role,
-	)
-	return err
+	now := time.Now().UTC().Format(time.RFC3339)
+	m := models.OrgMember{OrgID: orgID, UserID: userID, Role: role, CreatedAt: now}
+	return s.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "org_id"}, {Name: "user_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"role"}),
+	}).Create(&m).Error
 }
 
 func (s *OrgStore) RemoveMember(orgID, userID string) error {
-	_, err := s.db.Exec("DELETE FROM org_members WHERE org_id = ? AND user_id = ?", orgID, userID)
-	return err
+	return s.db.Delete(&models.OrgMember{}, "org_id = ? AND user_id = ?", orgID, userID).Error
 }
 
 func (s *OrgStore) GetMemberRole(orgID, userID string) (string, error) {
-	var role string
-	err := s.db.QueryRow("SELECT role FROM org_members WHERE org_id = ? AND user_id = ?", orgID, userID).Scan(&role)
+	var m models.OrgMember
+	err := s.db.Select("role").Where("org_id = ? AND user_id = ?", orgID, userID).First(&m).Error
 	if err != nil {
 		return "", err
 	}
-	return role, nil
+	return m.Role, nil
 }
 
 func (s *OrgStore) ListMembers(orgID string) ([]models.OrgMember, error) {
-	rows, err := s.db.Query(`
-		SELECT om.org_id, om.user_id, om.role, om.created_at, u.username
-		FROM org_members om
-		JOIN users u ON u.id = om.user_id
-		WHERE om.org_id = ?
-		ORDER BY om.created_at ASC`, orgID,
-	)
+	var members []models.OrgMember
+	err := s.db.Preload("User").Where("org_id = ?", orgID).Order("created_at ASC").Find(&members).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var members []models.OrgMember
-	for rows.Next() {
-		var m models.OrgMember
-		if err := rows.Scan(&m.OrgID, &m.UserID, &m.Role, &m.CreatedAt, &m.Username); err != nil {
-			return nil, err
+	for i := range members {
+		if members[i].User != nil {
+			members[i].Username = members[i].User.Username
 		}
-		members = append(members, m)
 	}
-	return members, nil
+	return members, err
 }
 
 func (s *OrgStore) ListByUser(userID string) ([]models.Organization, error) {
-	rows, err := s.db.Query(`
-		SELECT o.id, o.name, o.display_name, o.description, o.avatar_url, o.created_at, o.updated_at
-		FROM organizations o
-		JOIN org_members om ON om.org_id = o.id
-		WHERE om.user_id = ?
-		ORDER BY o.name ASC`, userID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var orgs []models.Organization
-	for rows.Next() {
-		var o models.Organization
-		if err := rows.Scan(&o.ID, &o.Name, &o.DisplayName, &o.Description, &o.AvatarURL, &o.CreatedAt, &o.UpdatedAt); err != nil {
-			return nil, err
-		}
-		orgs = append(orgs, o)
-	}
-	return orgs, nil
+	subQuery := s.db.Model(&models.OrgMember{}).Select("org_id").Where("user_id = ?", userID)
+	err := s.db.Where("id IN (?)", subQuery).Order("name ASC").Find(&orgs).Error
+	return orgs, err
 }

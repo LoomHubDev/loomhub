@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/LoomHubDev/loomhub/internal/models"
 )
@@ -118,6 +119,8 @@ func (h *Handler) Send(loom *models.Loom, req *PushRequest) (*PushResponse, erro
 		return nil, fmt.Errorf("open loom db: %w", err)
 	}
 
+	now := time.Now().UTC().Format(time.RFC3339)
+
 	// Store objects in shared store
 	for _, obj := range req.Objects {
 		if err := h.objects.Write(obj.Hash, obj.Content); err != nil {
@@ -125,12 +128,12 @@ func (h *Handler) Send(loom *models.Loom, req *PushRequest) (*PushResponse, erro
 		}
 		// Track reference in hub db
 		h.hubDB.Exec(
-			"INSERT OR IGNORE INTO object_refs (hash, loom_id, size) VALUES (?, ?, ?)",
+			"INSERT INTO object_refs (hash, loom_id, size) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
 			obj.Hash, loom.ID, len(obj.Content),
 		)
 		// Track in loom's object index
 		db.Exec(
-			"INSERT OR IGNORE INTO objects (hash, size) VALUES (?, ?)",
+			"INSERT INTO objects (hash, size) VALUES (?, ?) ON CONFLICT DO NOTHING",
 			obj.Hash, len(obj.Content),
 		)
 	}
@@ -149,8 +152,8 @@ func (h *Handler) Send(loom *models.Loom, req *PushRequest) (*PushResponse, erro
 		metaBytes, _ := json.Marshal(op.Meta)
 
 		_, err := tx.Exec(`
-			INSERT OR IGNORE INTO operations (id, seq, stream_id, space_id, entity_id, type, path, delta, object_ref, parent_seq, author, timestamp, meta)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			INSERT INTO operations (id, seq, stream_id, space_id, entity_id, type, path, delta, object_ref, parent_seq, author, timestamp, meta)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
 			op.ID, op.Seq, op.StreamID, op.SpaceID, op.EntityID, op.Type, op.Path,
 			deltaBytes, op.ObjectRef, op.ParentSeq, op.Author, op.Timestamp, metaBytes,
 		)
@@ -181,9 +184,9 @@ func (h *Handler) Send(loom *models.Loom, req *PushRequest) (*PushResponse, erro
 	if req.StreamID != "" && maxSeq > 0 {
 		tx.Exec(`
 			INSERT INTO streams (id, name, head_seq, status, created_at, updated_at)
-			VALUES (?, ?, ?, 'active', datetime('now'), datetime('now'))
-			ON CONFLICT(id) DO UPDATE SET head_seq = MAX(head_seq, excluded.head_seq), updated_at = datetime('now')`,
-			req.StreamID, req.StreamID, maxSeq,
+			VALUES (?, ?, ?, 'active', ?, ?)
+			ON CONFLICT(id) DO UPDATE SET head_seq = MAX(head_seq, excluded.head_seq), updated_at = ?`,
+			req.StreamID, req.StreamID, maxSeq, now, now, now,
 		)
 	}
 
@@ -192,7 +195,7 @@ func (h *Handler) Send(loom *models.Loom, req *PushRequest) (*PushResponse, erro
 	}
 
 	// Update hub-level stats
-	h.hubDB.Exec("UPDATE looms SET synced_at = datetime('now'), updated_at = datetime('now') WHERE id = ?", loom.ID)
+	h.hubDB.Exec("UPDATE looms SET synced_at = ?, updated_at = ? WHERE id = ?", now, now, loom.ID)
 
 	return &PushResponse{
 		OK:         true,

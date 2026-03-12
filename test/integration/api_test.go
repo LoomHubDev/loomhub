@@ -2,7 +2,6 @@ package integration
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,19 +10,27 @@ import (
 	"github.com/LoomHubDev/loomhub/internal/config"
 	"github.com/LoomHubDev/loomhub/internal/database"
 	"github.com/LoomHubDev/loomhub/internal/server"
-	_ "modernc.org/sqlite"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func testServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	db, err := sql.Open("sqlite", ":memory:?_pragma=foreign_keys(1)")
+	db, err := gorm.Open(sqlite.Open(":memory:?_pragma=foreign_keys(1)"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := database.Migrate(db); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { db.Close() })
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sqlDB.Close() })
 
 	cfg := config.Defaults()
 	cfg.Auth.JWTSecret = "test-secret"
@@ -1267,13 +1274,11 @@ func TestLabelAssignToWR(t *testing.T) {
 		t.Errorf("assign without wr_id status = %d, want 400", resp.StatusCode)
 	}
 
-	// Assign to nonexistent label — the handler checks ownership then calls AddToWR
-	// which hits a FK constraint. The server returns 500 because the label doesn't exist
-	// in the labels table. This is expected behavior (no pre-validation).
+	// Assign to nonexistent label — handler validates label exists first
 	body, _ = json.Marshal(map[string]string{"wr_id": wrID})
 	resp, _ = http.DefaultClient.Do(authReq("POST", ts.URL+"/api/v1/looms/alice/my-app/labels/nonexistent-label/assign", token, body))
-	if resp.StatusCode != 500 {
-		t.Errorf("assign nonexistent label status = %d, want 500", resp.StatusCode)
+	if resp.StatusCode != 404 {
+		t.Errorf("assign nonexistent label status = %d, want 404", resp.StatusCode)
 	}
 
 	// Non-owner can't assign

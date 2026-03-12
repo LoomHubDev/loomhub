@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -12,15 +11,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"gorm.io/gorm"
 )
 
 type Server struct {
 	router chi.Router
 	cfg    *config.Config
-	db     *sql.DB
+	db     *gorm.DB
 }
 
-func New(cfg *config.Config, db *sql.DB, frontendFS fs.FS) *Server {
+func New(cfg *config.Config, db *gorm.DB, frontendFS fs.FS) *Server {
 	s := &Server{cfg: cfg, db: db}
 	s.setupRoutes(frontendFS)
 	return s

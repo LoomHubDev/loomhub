@@ -1,26 +1,22 @@
 package store
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/LoomHubDev/loomhub/internal/models"
+	"gorm.io/gorm"
 )
 
 type OwnerStore struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewOwnerStore(db *sql.DB) *OwnerStore {
+func NewOwnerStore(db *gorm.DB) *OwnerStore {
 	return &OwnerStore{db: db}
 }
 
 func (s *OwnerStore) Create(owner *models.Owner) error {
-	_, err := s.db.Exec(
-		"INSERT INTO owners (id, name, type, created_at) VALUES (?, ?, ?, ?)",
-		owner.ID, owner.Name, owner.Type, owner.CreatedAt,
-	)
-	if err != nil {
+	if err := s.db.Create(owner).Error; err != nil {
 		return fmt.Errorf("create owner: %w", err)
 	}
 	return nil
@@ -28,17 +24,14 @@ func (s *OwnerStore) Create(owner *models.Owner) error {
 
 func (s *OwnerStore) GetByName(name string) (*models.Owner, error) {
 	var o models.Owner
-	err := s.db.QueryRow(
-		"SELECT id, name, type, created_at FROM owners WHERE name = ?", name,
-	).Scan(&o.ID, &o.Name, &o.Type, &o.CreatedAt)
-	if err != nil {
+	if err := s.db.Where("name = ?", name).First(&o).Error; err != nil {
 		return nil, err
 	}
 	return &o, nil
 }
 
 func (s *OwnerStore) NameExists(name string) (bool, error) {
-	var count int
-	err := s.db.QueryRow("SELECT COUNT(*) FROM owners WHERE name = ?", name).Scan(&count)
+	var count int64
+	err := s.db.Model(&models.Owner{}).Where("name = ?", name).Count(&count).Error
 	return count > 0, err
 }

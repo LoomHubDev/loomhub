@@ -32,6 +32,7 @@ func main() {
 func serveCmd() *cobra.Command {
 	var configPath string
 	var dataDir string
+	var databaseURL string
 	var port int
 	var host string
 	var dev bool
@@ -58,12 +59,16 @@ func serveCmd() *cobra.Command {
 			if cmd.Flags().Changed("dev") {
 				cfg.Server.Dev = dev
 			}
+			if cmd.Flags().Changed("database-url") {
+				cfg.Server.DatabaseURL = databaseURL
+			}
 
-			db, err := database.OpenHub(cfg.Server.DataDir)
+			db, err := database.OpenHub(cfg.Server.DataDir, cfg.Server.DatabaseURL, cfg.Server.Dev)
 			if err != nil {
 				return fmt.Errorf("open database: %w", err)
 			}
-			defer db.Close()
+			sqlDB, _ := db.DB()
+			defer sqlDB.Close()
 
 			if err := database.Migrate(db); err != nil {
 				return fmt.Errorf("migrate: %w", err)
@@ -79,6 +84,7 @@ func serveCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&configPath, "config", "config.toml", "Path to config file")
 	cmd.Flags().StringVar(&dataDir, "data", "./data", "Data directory")
+	cmd.Flags().StringVar(&databaseURL, "database-url", "", "Database URL (postgres://...)")
 	cmd.Flags().IntVar(&port, "port", 3000, "HTTP port")
 	cmd.Flags().StringVar(&host, "host", "0.0.0.0", "Bind address")
 	cmd.Flags().BoolVar(&dev, "dev", false, "Development mode")
@@ -88,16 +94,18 @@ func serveCmd() *cobra.Command {
 
 func migrateCmd() *cobra.Command {
 	var dataDir string
+	var databaseURL string
 
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Run database migrations",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := database.OpenHub(dataDir)
+			db, err := database.OpenHub(dataDir, databaseURL, false)
 			if err != nil {
 				return fmt.Errorf("open database: %w", err)
 			}
-			defer db.Close()
+			sqlDB, _ := db.DB()
+			defer sqlDB.Close()
 
 			if err := database.Migrate(db); err != nil {
 				return fmt.Errorf("migrate: %w", err)
@@ -109,5 +117,6 @@ func migrateCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&dataDir, "data", "./data", "Data directory")
+	cmd.Flags().StringVar(&databaseURL, "database-url", "", "Database URL (postgres://...)")
 	return cmd
 }

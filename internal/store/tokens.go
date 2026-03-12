@@ -1,51 +1,29 @@
 package store
 
 import (
-	"database/sql"
-
 	"github.com/LoomHubDev/loomhub/internal/models"
+	"gorm.io/gorm"
 )
 
 type TokenStore struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewTokenStore(db *sql.DB) *TokenStore {
+func NewTokenStore(db *gorm.DB) *TokenStore {
 	return &TokenStore{db: db}
 }
 
 func (s *TokenStore) Create(t *models.AccessToken) error {
-	_, err := s.db.Exec(`
-		INSERT INTO access_tokens (id, user_id, name, token_hash, scopes, expires_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		t.ID, t.UserID, t.Name, t.TokenHash, t.Scopes, t.ExpiresAt, t.CreatedAt,
-	)
-	return err
+	return s.db.Create(t).Error
 }
 
 func (s *TokenStore) ListByUser(userID string) ([]models.AccessToken, error) {
-	rows, err := s.db.Query(`
-		SELECT id, user_id, name, scopes, expires_at, last_used_at, created_at
-		FROM access_tokens WHERE user_id = ?
-		ORDER BY created_at DESC`, userID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var tokens []models.AccessToken
-	for rows.Next() {
-		var t models.AccessToken
-		if err := rows.Scan(&t.ID, &t.UserID, &t.Name, &t.Scopes, &t.ExpiresAt, &t.LastUsedAt, &t.CreatedAt); err != nil {
-			return nil, err
-		}
-		tokens = append(tokens, t)
-	}
-	return tokens, nil
+	err := s.db.Select("id, user_id, name, scopes, expires_at, last_used_at, created_at").
+		Where("user_id = ?", userID).Order("created_at DESC").Find(&tokens).Error
+	return tokens, err
 }
 
 func (s *TokenStore) Delete(id, userID string) error {
-	_, err := s.db.Exec("DELETE FROM access_tokens WHERE id = ? AND user_id = ?", id, userID)
-	return err
+	return s.db.Delete(&models.AccessToken{}, "id = ? AND user_id = ?", id, userID).Error
 }

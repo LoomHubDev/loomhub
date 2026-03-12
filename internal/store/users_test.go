@@ -1,25 +1,32 @@
 package store
 
 import (
-	"database/sql"
 	"testing"
 	"time"
 
 	"github.com/LoomHubDev/loomhub/internal/database"
 	"github.com/LoomHubDev/loomhub/internal/models"
-	_ "modernc.org/sqlite"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-func testDB(t *testing.T) *sql.DB {
+func testDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", ":memory:?_pragma=foreign_keys(1)")
+	db, err := gorm.Open(sqlite.Open(":memory:?_pragma=foreign_keys(1)"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := database.Migrate(db); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { db.Close() })
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sqlDB.Close() })
 	return db
 }
 

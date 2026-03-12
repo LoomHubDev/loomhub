@@ -1,18 +1,19 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/LoomHubDev/loomhub/internal/config"
 	"github.com/LoomHubDev/loomhub/internal/store"
 	"github.com/LoomHubDev/loomhub/internal/sync"
+	"gorm.io/gorm"
 )
 
 type Handler struct {
 	cfg           *config.Config
-	db            *sql.DB
+	db            *gorm.DB
 	owners        *store.OwnerStore
 	users         *store.UserStore
 	looms         *store.LoomStore
@@ -30,7 +31,13 @@ type Handler struct {
 	sync          *sync.Handler
 }
 
-func NewHandler(cfg *config.Config, db *sql.DB) *Handler {
+func NewHandler(cfg *config.Config, db *gorm.DB) *Handler {
+	// Extract raw *sql.DB for sync handler (per-loom SQLite databases)
+	sqlDB, err := db.DB()
+	if err != nil {
+		panic(fmt.Sprintf("failed to get underlying sql.DB: %v", err))
+	}
+
 	return &Handler{
 		cfg:           cfg,
 		db:            db,
@@ -48,7 +55,7 @@ func NewHandler(cfg *config.Config, db *sql.DB) *Handler {
 		labels:        store.NewLabelStore(db),
 		search:        store.NewSearchStore(db),
 		tokens:        store.NewTokenStore(db),
-		sync:          sync.NewHandler(db, cfg.Server.DataDir),
+		sync:          sync.NewHandler(sqlDB, cfg.Server.DataDir),
 	}
 }
 

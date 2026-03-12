@@ -22,6 +22,10 @@ internal/server/dist/
 .vscode/
 *.swp
 
+# Secrets
+.env
+basepod.yaml
+
 # OS
 .DS_Store
 

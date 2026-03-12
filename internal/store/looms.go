@@ -1,151 +1,98 @@
 package store
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/LoomHubDev/loomhub/internal/models"
+	"gorm.io/gorm"
 )
 
 type LoomStore struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewLoomStore(db *sql.DB) *LoomStore {
+func NewLoomStore(db *gorm.DB) *LoomStore {
 	return &LoomStore{db: db}
 }
 
 func (s *LoomStore) Create(loom *models.Loom) error {
-	_, err := s.db.Exec(`
-		INSERT INTO looms (id, owner_id, name, description, visibility, default_stream, disk_path, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		loom.ID, loom.OwnerID, loom.Name, loom.Description, loom.Visibility,
-		loom.DefaultStream, loom.DiskPath, loom.CreatedAt, loom.UpdatedAt,
-	)
-	if err != nil {
+	if err := s.db.Create(loom).Error; err != nil {
 		return fmt.Errorf("create loom: %w", err)
 	}
 	return nil
 }
 
 func (s *LoomStore) GetByOwnerAndName(ownerName, loomName string) (*models.Loom, error) {
-	var l models.Loom
-	err := s.db.QueryRow(`
-		SELECT l.id, l.owner_id, l.name, l.description, l.visibility, l.default_stream,
-			   l.disk_path, l.size_bytes, l.checkpoint_count, l.stream_count,
-			   l.pin_count, l.spin_count, l.spun_from, l.created_at, l.updated_at, l.synced_at,
-			   o.name
-		FROM looms l
-		JOIN owners o ON o.id = l.owner_id
-		WHERE o.name = ? AND l.name = ?`,
-		ownerName, loomName,
-	).Scan(
-		&l.ID, &l.OwnerID, &l.Name, &l.Description, &l.Visibility, &l.DefaultStream,
-		&l.DiskPath, &l.SizeBytes, &l.CheckpointCount, &l.StreamCount,
-		&l.PinCount, &l.SpinCount, &l.SpunFrom, &l.CreatedAt, &l.UpdatedAt, &l.SyncedAt,
-		&l.OwnerName,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("get loom: %w", err)
+	var owner models.Owner
+	if err := s.db.Where("name = ?", ownerName).First(&owner).Error; err != nil {
+		return nil, gorm.ErrRecordNotFound
 	}
-	l.FullName = l.OwnerName + "/" + l.Name
+
+	var l models.Loom
+	if err := s.db.Where("owner_id = ? AND name = ?", owner.ID, loomName).First(&l).Error; err != nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	l.OwnerName = ownerName
+	l.FullName = ownerName + "/" + l.Name
 	return &l, nil
 }
 
 func (s *LoomStore) ListByOwner(ownerID string, limit, offset int) ([]models.Loom, int, error) {
-	var total int
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM looms WHERE owner_id = ?", ownerID).Scan(&total); err != nil {
+	var total int64
+	if err := s.db.Model(&models.Loom{}).Where("owner_id = ?", ownerID).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	rows, err := s.db.Query(`
-		SELECT l.id, l.owner_id, l.name, l.description, l.visibility, l.default_stream,
-			   l.disk_path, l.size_bytes, l.checkpoint_count, l.stream_count,
-			   l.pin_count, l.spin_count, l.spun_from, l.created_at, l.updated_at, l.synced_at,
-			   o.name
-		FROM looms l
-		JOIN owners o ON o.id = l.owner_id
-		WHERE l.owner_id = ?
-		ORDER BY l.updated_at DESC
-		LIMIT ? OFFSET ?`,
-		ownerID, limit, offset,
-	)
+	var looms []models.Loom
+	err := s.db.Preload("Owner").
+		Where("owner_id = ?", ownerID).
+		Order("updated_at DESC").
+		Limit(limit).Offset(offset).
+		Find(&looms).Error
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
 
-	var looms []models.Loom
-	for rows.Next() {
-		var l models.Loom
-		if err := rows.Scan(
-			&l.ID, &l.OwnerID, &l.Name, &l.Description, &l.Visibility, &l.DefaultStream,
-			&l.DiskPath, &l.SizeBytes, &l.CheckpointCount, &l.StreamCount,
-			&l.PinCount, &l.SpinCount, &l.SpunFrom, &l.CreatedAt, &l.UpdatedAt, &l.SyncedAt,
-			&l.OwnerName,
-		); err != nil {
-			return nil, 0, err
-		}
-		l.FullName = l.OwnerName + "/" + l.Name
-		looms = append(looms, l)
+	for i := range looms {
+		looms[i].FillOwnerFields()
 	}
-	return looms, total, nil
+	return looms, int(total), nil
 }
 
 func (s *LoomStore) ListPublicByOwner(ownerName string, limit, offset int) ([]models.Loom, int, error) {
-	var total int
-	if err := s.db.QueryRow(`
-		SELECT COUNT(*) FROM looms l JOIN owners o ON o.id = l.owner_id
-		WHERE o.name = ? AND l.visibility = 'public'`,
-		ownerName,
-	).Scan(&total); err != nil {
+	var owner models.Owner
+	if err := s.db.Where("name = ?", ownerName).First(&owner).Error; err != nil {
 		return nil, 0, err
 	}
 
-	rows, err := s.db.Query(`
-		SELECT l.id, l.owner_id, l.name, l.description, l.visibility, l.default_stream,
-			   l.disk_path, l.size_bytes, l.checkpoint_count, l.stream_count,
-			   l.pin_count, l.spin_count, l.spun_from, l.created_at, l.updated_at, l.synced_at,
-			   o.name
-		FROM looms l
-		JOIN owners o ON o.id = l.owner_id
-		WHERE o.name = ? AND l.visibility = 'public'
-		ORDER BY l.updated_at DESC
-		LIMIT ? OFFSET ?`,
-		ownerName, limit, offset,
-	)
+	var total int64
+	s.db.Model(&models.Loom{}).Where("owner_id = ? AND visibility = ?", owner.ID, "public").Count(&total)
+
+	var looms []models.Loom
+	err := s.db.Where("owner_id = ? AND visibility = ?", owner.ID, "public").
+		Order("updated_at DESC").
+		Limit(limit).Offset(offset).
+		Find(&looms).Error
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
 
-	var looms []models.Loom
-	for rows.Next() {
-		var l models.Loom
-		if err := rows.Scan(
-			&l.ID, &l.OwnerID, &l.Name, &l.Description, &l.Visibility, &l.DefaultStream,
-			&l.DiskPath, &l.SizeBytes, &l.CheckpointCount, &l.StreamCount,
-			&l.PinCount, &l.SpinCount, &l.SpunFrom, &l.CreatedAt, &l.UpdatedAt, &l.SyncedAt,
-			&l.OwnerName,
-		); err != nil {
-			return nil, 0, err
-		}
-		l.FullName = l.OwnerName + "/" + l.Name
-		looms = append(looms, l)
+	for i := range looms {
+		looms[i].OwnerName = ownerName
+		looms[i].FullName = ownerName + "/" + looms[i].Name
 	}
-	return looms, total, nil
+	return looms, int(total), nil
 }
 
 func (s *LoomStore) Delete(id string) error {
-	_, err := s.db.Exec("DELETE FROM looms WHERE id = ?", id)
-	return err
+	return s.db.Delete(&models.Loom{}, "id = ?", id).Error
 }
 
 func (s *LoomStore) Update(loom *models.Loom) error {
-	_, err := s.db.Exec(`
-		UPDATE looms SET description = ?, visibility = ?, default_stream = ?, updated_at = ?
-		WHERE id = ?`,
-		loom.Description, loom.Visibility, loom.DefaultStream, loom.UpdatedAt, loom.ID,
-	)
-	return err
+	return s.db.Model(loom).Updates(map[string]any{
+		"description":    loom.Description,
+		"visibility":     loom.Visibility,
+		"default_stream": loom.DefaultStream,
+		"updated_at":     loom.UpdatedAt,
+	}).Error
 }

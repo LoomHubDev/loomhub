@@ -17,11 +17,12 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Host    string `toml:"host"`
-	Port    int    `toml:"port"`
-	BaseURL string `toml:"base_url"`
-	DataDir string `toml:"data_dir"`
-	Dev     bool   `toml:"dev"`
+	Host        string `toml:"host"`
+	Port        int    `toml:"port"`
+	BaseURL     string `toml:"base_url"`
+	DataDir     string `toml:"data_dir"`
+	Dev         bool   `toml:"dev"`
+	DatabaseURL string `toml:"database_url"`
 }
 
 type AuthConfig struct {
@@ -32,9 +33,9 @@ type AuthConfig struct {
 }
 
 type StorageConfig struct {
-	MaxObjectSize    string `toml:"max_object_size"`
-	MaxSendSize      string `toml:"max_send_size"`
-	MaxLoomsPerUser  int    `toml:"max_looms_per_user"`
+	MaxObjectSize   string `toml:"max_object_size"`
+	MaxSendSize     string `toml:"max_send_size"`
+	MaxLoomsPerUser int    `toml:"max_looms_per_user"`
 }
 
 type RateLimitConfig struct {
@@ -82,10 +83,10 @@ func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// No config file — use defaults
 			if cfg.Auth.JWTSecret == "" {
 				cfg.Auth.JWTSecret = generateSecret()
 			}
+			applyEnv(cfg)
 			return cfg, nil
 		}
 		return nil, err
@@ -99,7 +100,14 @@ func Load(path string) (*Config, error) {
 		cfg.Auth.JWTSecret = generateSecret()
 	}
 
+	applyEnv(cfg)
 	return cfg, nil
+}
+
+func applyEnv(cfg *Config) {
+	if url := os.Getenv("DATABASE_URL"); url != "" {
+		cfg.Server.DatabaseURL = url
+	}
 }
 
 func generateSecret() string {

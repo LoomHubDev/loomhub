@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/LoomHubDev/loomhub/internal/auth"
+	"github.com/LoomHubDev/loomhub/internal/models"
 )
 
 func (h *Handler) AdminStats(w http.ResponseWriter, r *http.Request) {
@@ -13,11 +14,11 @@ func (h *Handler) AdminStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userCount, loomCount, wrCount, orgCount int
-	h.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&userCount)
-	h.db.QueryRow("SELECT COUNT(*) FROM looms").Scan(&loomCount)
-	h.db.QueryRow("SELECT COUNT(*) FROM weave_requests").Scan(&wrCount)
-	h.db.QueryRow("SELECT COUNT(*) FROM organizations").Scan(&orgCount)
+	var userCount, loomCount, wrCount, orgCount int64
+	h.db.Model(&models.User{}).Count(&userCount)
+	h.db.Model(&models.Loom{}).Count(&loomCount)
+	h.db.Model(&models.WeaveRequest{}).Count(&wrCount)
+	h.db.Model(&models.Organization{}).Count(&orgCount)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"users":          userCount,

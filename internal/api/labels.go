@@ -175,6 +175,11 @@ func (h *Handler) AddLabelToWR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, err := h.labels.GetByID(labelID); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "Label not found")
+		return
+	}
+
 	if err := h.labels.AddToWR(req.WRID, labelID); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to add label")
 		return

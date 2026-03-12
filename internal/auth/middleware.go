@@ -3,10 +3,13 @@ package auth
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/LoomHubDev/loomhub/internal/models"
+	"gorm.io/gorm"
 )
 
 type contextKey string
@@ -19,7 +22,7 @@ type ContextUser struct {
 	IsAdmin  bool
 }
 
-func Middleware(secret string, db *sql.DB) func(http.Handler) http.Handler {
+func Middleware(secret string, db *gorm.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user := extractUser(r, secret, db)
@@ -48,7 +51,7 @@ func GetUser(ctx context.Context) *ContextUser {
 	return u
 }
 
-func extractUser(r *http.Request, secret string, db *sql.DB) *ContextUser {
+func extractUser(r *http.Request, secret string, db *gorm.DB) *ContextUser {
 	// Try JWT from cookie
 	if cookie, err := r.Cookie("session"); err == nil {
 		claims, err := ValidateToken(cookie.Value, secret)
@@ -62,13 +65,13 @@ func extractUser(r *http.Request, secret string, db *sql.DB) *ContextUser {
 	}
 
 	// Try Bearer token (JWT or access token)
-	auth := r.Header.Get("Authorization")
-	if auth == "" {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
 		return nil
 	}
 
-	token := strings.TrimPrefix(auth, "Bearer ")
-	if token == auth {
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	if token == authHeader {
 		return nil
 	}
 
@@ -85,26 +88,26 @@ func extractUser(r *http.Request, secret string, db *sql.DB) *ContextUser {
 	// Try as access token
 	hash := sha256.Sum256([]byte(token))
 	tokenHash := hex.EncodeToString(hash[:])
+	now := time.Now().UTC().Format(time.RFC3339)
 
-	var userID, username string
-	var isAdmin bool
-	err = db.QueryRow(`
-		SELECT u.id, u.username, u.is_admin
-		FROM access_tokens t
-		JOIN users u ON u.id = t.user_id
-		WHERE t.token_hash = ?
-		AND (t.expires_at IS NULL OR t.expires_at > datetime('now'))
-	`, tokenHash).Scan(&userID, &username, &isAdmin)
+	var at models.AccessToken
+	err = db.Where("token_hash = ? AND (expires_at IS NULL OR expires_at > ?)", tokenHash, now).
+		First(&at).Error
 	if err != nil {
 		return nil
 	}
 
+	var user models.User
+	if err = db.Where("id = ?", at.UserID).First(&user).Error; err != nil {
+		return nil
+	}
+
 	// Update last_used_at
-	db.Exec("UPDATE access_tokens SET last_used_at = datetime('now') WHERE token_hash = ?", tokenHash)
+	db.Model(&at).Update("last_used_at", now)
 
 	return &ContextUser{
-		ID:       userID,
-		Username: username,
-		IsAdmin:  isAdmin,
+		ID:       user.ID,
+		Username: user.Username,
+		IsAdmin:  user.IsAdmin,
 	}
 }

@@ -1,9 +1,9 @@
 package models
 
 type User struct {
-	ID           string `json:"id"`
-	Username     string `json:"username"`
-	Email        string `json:"email"`
+	ID           string `json:"id" gorm:"primaryKey"`
+	Username     string `json:"username" gorm:"uniqueIndex"`
+	Email        string `json:"email" gorm:"uniqueIndex"`
 	DisplayName  string `json:"display_name"`
 	Bio          string `json:"bio"`
 	AvatarURL    string `json:"avatar_url"`
@@ -14,10 +14,10 @@ type User struct {
 }
 
 type AccessToken struct {
-	ID         string  `json:"id"`
-	UserID     string  `json:"user_id"`
+	ID         string  `json:"id" gorm:"primaryKey"`
+	UserID     string  `json:"user_id" gorm:"index"`
 	Name       string  `json:"name"`
-	TokenHash  string  `json:"-"`
+	TokenHash  string  `json:"-" gorm:"uniqueIndex"`
 	Scopes     string  `json:"scopes"`
 	ExpiresAt  *string `json:"expires_at"`
 	LastUsedAt *string `json:"last_used_at"`
