@@ -1,0 +1,32 @@
+# Binary
+bin/
+loomhub
+
+# Data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Dependencies
+vendor/
+
+# Tailwind
+node_modules/
+
+# Generated — Vue dist copied for Go embedding
+internal/server/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Build output
+frontend/dist/
+coverage.out
+coverage2.out
+*.output

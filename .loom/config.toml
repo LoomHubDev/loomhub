@@ -1,0 +1,26 @@
+[project]
+  name = "loomhub"
+  version = 1
+
+[author]
+  name = "Flakerim Ismani"
+  email = "flakerimi@gmail.com"
+
+[spaces]
+  [spaces.code]
+    adapter = "git"
+    path = "."
+  [spaces.docs]
+    adapter = "filesystem"
+    path = "docs"
+
+[watch]
+  enabled = true
+  debounce_ms = 500
+  ignore = [".git", "node_modules", "dist", "build", ".loom", "*.tmp", "*.swp"]
+
+[checkpoint]
+  auto = true
+  interval_ops = 50
+  interval_seconds = 300
+  on_significant_change = true
