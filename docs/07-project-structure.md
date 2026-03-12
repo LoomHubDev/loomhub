@@ -122,7 +122,7 @@ loomhub/
 
 ```go
 // go.mod
-module github.com/flakerimi/loomhub
+module github.com/LoomHubDev/loomhub
 
 go 1.23
 
